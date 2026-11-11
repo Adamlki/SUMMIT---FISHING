@@ -2,6 +2,8 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 
+local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
+
 local player = Players.LocalPlayer
 local gui = script.Parent
 local mainFrame = gui:WaitForChild("MainFrame")
@@ -566,29 +568,28 @@ end
 
 -- Load Initial Caught Data from Server
 task.spawn(function()
-	pcall(function()
-		local getIndexFunc = fishingSystem and fishingSystem:WaitForChild("GetFishIndex", 15)
-		if getIndexFunc then
-			local saved = getIndexFunc:InvokeServer()
-			if saved and type(saved) == "table" then
-				caughtData = saved
-				if refreshGrid then refreshGrid() end
-			end
+	for _ = 1, 5 do
+		local callOk, awaitedOk, response = pcall(function()
+			return NetworkGateway:Request("GET", "/fishing/index"):await()
+		end)
+		if callOk and awaitedOk and type(response) == "table" and response.Success and type(response.Data) == "table" then
+			caughtData = response.Data
+			if refreshGrid then refreshGrid() end
+			return
 		end
-	end)
+		task.wait(1)
+	end
 end)
 
--- Realtime Remote Listener
+-- Realtime Gateway Listener
 local function setupCatchListener()
-	local catchSuccess = ReplicatedStorage:WaitForChild("FishingCatchSuccess", 15)
-	if catchSuccess then
-		catchSuccess.OnClientEvent:Connect(function(fishName, newCount)
-			if fishName then
-				caughtData[fishName] = newCount or ((caughtData[fishName] or 0) + 1)
-				if refreshGrid then refreshGrid() end
-			end
-		end)
-	end
+	NetworkGateway:On("Fishing/CatchSuccess", function(event)
+		if type(event) ~= "table" then return end
+		local fishName = event.FishName
+		if type(fishName) ~= "string" or fishName == "" then return end
+		caughtData[fishName] = event.SpeciesCount or ((caughtData[fishName] or 0) + 1)
+		if refreshGrid then refreshGrid() end
+	end)
 end
 
 setupCatchListener()

@@ -13,12 +13,9 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 
-local REMOTE_NAME = "CarryRemote"
-local CarryRemote = ReplicatedStorage:FindFirstChild(REMOTE_NAME)
-if not CarryRemote then
-	CarryRemote = Instance.new("RemoteEvent")
-	CarryRemote.Name = REMOTE_NAME
-	CarryRemote.Parent = ReplicatedStorage
+local function sendCarryEvent(player, action, data)
+	if not player or not player.Parent then return end
+	NetworkGateway:Broadcast("Carry/Event", { Action = action, Data = data }, player)
 end
 
 -- ========================================
@@ -439,7 +436,7 @@ local function buildCarriedList(carrier)
 end
 
 local function sendCarrierList(carrier)
-	CarryRemote:FireClient(carrier, "CarrierList", { list = buildCarriedList(carrier) })
+	sendCarryEvent(carrier, "CarrierList", { list = buildCarriedList(carrier) })
 end
 
 local function reindexSlots(carrier)
@@ -476,17 +473,14 @@ local function sendStart(carrier, target)
 	local total = countCarried(carrier)
 	local carrierPayload = { carrierId = carrier.UserId, carrierName = carrier.DisplayName, targetId = target.UserId, targetName = target.DisplayName, youAreCarrier = true, carrierActiveCount = total }
 	local targetPayload = { carrierId = carrier.UserId, carrierName = carrier.DisplayName, targetId = target.UserId, targetName = target.DisplayName, youAreCarrier = false }
-	CarryRemote:FireClient(carrier, "Start", carrierPayload)
-	CarryRemote:FireClient(target, "Start", targetPayload)
-	NetworkGateway:Broadcast("Carry/Event", { Action = "Start", Data = carrierPayload }, carrier)
-	NetworkGateway:Broadcast("Carry/Event", { Action = "Start", Data = targetPayload }, target)
+	sendCarryEvent(carrier, "Start", carrierPayload)
+	sendCarryEvent(target, "Start", targetPayload)
 end
 
 local function sendEndForCarrierOnly(carrier, removedTarget, reason)
 	local total = countCarried(carrier)
 	local payload = { reason = reason or "end", youAreCarrier = true, carrierActiveCount = total, removedId = removedTarget.UserId, removedName = removedTarget.DisplayName }
-	CarryRemote:FireClient(carrier, "End", payload)
-	NetworkGateway:Broadcast("Carry/Event", { Action = "End", Data = payload }, carrier)
+	sendCarryEvent(carrier, "End", payload)
 end
 
 local function sendEndPair(carrier, target, reason)
@@ -494,10 +488,8 @@ local function sendEndPair(carrier, target, reason)
 	local carrierPayload = { reason = reason or "end", youAreCarrier = true, carrierActiveCount = total, removedId = target.UserId, removedName = target.DisplayName }
 	local still = countCarried(target)
 	local targetPayload = { reason = reason or "end", youAreCarrier = false, yourCarryCount = still }
-	CarryRemote:FireClient(carrier, "End", carrierPayload)
-	CarryRemote:FireClient(target, "End", targetPayload)
-	NetworkGateway:Broadcast("Carry/Event", { Action = "End", Data = carrierPayload }, carrier)
-	NetworkGateway:Broadcast("Carry/Event", { Action = "End", Data = targetPayload }, target)
+	sendCarryEvent(carrier, "End", carrierPayload)
+	sendCarryEvent(target, "End", targetPayload)
 end
 
 local function detachPair(carrier, target, reason)
@@ -594,8 +586,8 @@ task.spawn(function()
 			if now - info.time > PENDING_TIMEOUT then
 				local target = Players:GetPlayerByUserId(targetId)
 				if info.requester and info.requester.Parent == Players then
-					CarryRemote:FireClient(info.requester, "RequestExpired", { targetId = targetId })
-					if target then CarryRemote:FireClient(target, "PromptExpire", {}) end
+					sendCarryEvent(info.requester, "RequestExpired", { targetId = targetId })
+					if target then sendCarryEvent(target, "PromptExpire", {}) end
 				end
 				pending[targetId] = nil
 			end
@@ -787,27 +779,26 @@ local function requestCarry(player, targetId)
 	end
 	local distance = (cHRP.Position - tHRP.Position).Magnitude
 	if distance > MAX_DISTANCE then
-		CarryRemote:FireClient(player, "TooFar", { targetId = targetId })
+		sendCarryEvent(player, "TooFar", { targetId = targetId })
 		return carryFailure("Target is too far away.")
 	end
 	local extra = countCarried(target)
 	if (countCarried(player) + 1 + extra) > MAX_CARRY then
-		CarryRemote:FireClient(player, "Limit", { max = MAX_CARRY, reason = "transfer" })
+		sendCarryEvent(player, "Limit", { max = MAX_CARRY, reason = "transfer" })
 		return carryFailure("Carry limit reached.")
 	end
 	if not canCarrierRequest(player) or not targetAvailable(target) then
-		CarryRemote:FireClient(player, "Busy", {})
+		sendCarryEvent(player, "Busy", {})
 		return carryFailure("Carrier or target is busy.")
 	end
 	if hasPendingIncoming(player) or hasPendingOutgoing(player) or pending[target.UserId] then
-		CarryRemote:FireClient(player, "Busy", {})
+		sendCarryEvent(player, "Busy", {})
 		return carryFailure("A carry request is already pending.")
 	end
 
 	pending[target.UserId] = { requester = player, time = os.clock() }
 	local promptPayload = { fromId = player.UserId, fromName = player.DisplayName }
-	CarryRemote:FireClient(target, "Prompt", promptPayload)
-	NetworkGateway:Broadcast("Carry/Event", { Action = "Prompt", Data = promptPayload }, target)
+	sendCarryEvent(target, "Prompt", promptPayload)
 	return carrySuccess({ TargetId = targetId }, "Carry request sent.")
 end
 
@@ -826,19 +817,19 @@ local function respondCarry(player, requesterId, accept)
 	pending[player.UserId] = nil
 
 	if accept ~= true then
-		CarryRemote:FireClient(requester, "Declined", { targetId = player.UserId })
-		CarryRemote:FireClient(player, "PromptClose", {})
+		sendCarryEvent(requester, "Declined", { targetId = player.UserId })
+		sendCarryEvent(player, "PromptClose", {})
 		return carrySuccess({ Accepted = false }, "Carry request declined.")
 	end
 
 	local ok, err = startCarry(requester, player)
 	if not ok then
 		if tostring(err) == "limit_transfer" then
-			CarryRemote:FireClient(requester, "Limit", { max = MAX_CARRY, reason = "transfer" })
-			CarryRemote:FireClient(player, "Failed", { reason = "limit_transfer" })
+			sendCarryEvent(requester, "Limit", { max = MAX_CARRY, reason = "transfer" })
+			sendCarryEvent(player, "Failed", { reason = "limit_transfer" })
 		else
-			CarryRemote:FireClient(requester, "Failed", { reason = err })
-			CarryRemote:FireClient(player, "Failed", { reason = err })
+			sendCarryEvent(requester, "Failed", { reason = err })
+			sendCarryEvent(player, "Failed", { reason = err })
 		end
 		return carryFailure("Carry failed: " .. tostring(err), { Reason = tostring(err) })
 	end
@@ -858,18 +849,6 @@ local function stopCarry(player, targetId)
 	detachIfAny(player, "stop")
 	return carrySuccess(nil, "Carry stopped.")
 end
-
--- Dual-stack legacy event
-CarryRemote.OnServerEvent:Connect(function(player, action, data)
-	local payload = type(data) == "table" and data or nil
-	if action == "Request" then
-		requestCarry(player, payload and payload.targetId)
-	elseif action == "Response" then
-		respondCarry(player, payload and payload.requesterId, payload and payload.accept == true)
-	elseif action == "Stop" then
-		stopCarry(player, payload and payload.targetId)
-	end
-end)
 
 -- ===================================================================
 -- REST ROUTES (NETWORK GATEWAY)

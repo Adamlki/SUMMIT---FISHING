@@ -39,7 +39,6 @@ end
 -- WAIT FOR REMOTE EVENT
 -- ========================================
 
-local CarryRemote = ReplicatedStorage:WaitForChild("CarryRemote")
 local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 
 -- ========================================
@@ -525,7 +524,9 @@ end)
 -- REMOTE EVENT HANDLERS
 -- ========================================
 
-CarryRemote.OnClientEvent:Connect(function(action, data)
+NetworkGateway:On("Carry/Event", function(event)
+	local action = type(event) == "table" and event.Action or nil
+	local data = type(event) == "table" and event.Data or nil
 	-- ========================================
 	-- PROMPT ACTION (someone wants to carry you)
 	-- ========================================

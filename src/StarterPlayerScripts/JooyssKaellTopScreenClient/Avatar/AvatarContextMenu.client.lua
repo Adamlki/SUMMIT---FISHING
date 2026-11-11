@@ -48,7 +48,6 @@ local carryBind     = Instance.new("BindableEvent")
 local stopCarryBind = Instance.new("BindableEvent")
 
 local syncingFolder = ReplicatedStorage:WaitForChild("Syncing",     15)
-local carryRemote   = ReplicatedStorage:WaitForChild("CarryRemote", 15)
 
 if not syncingFolder then warn("[AvatarContextMenu] Syncing folder tidak ditemukan!") return end
 
@@ -83,9 +82,12 @@ local function carry(targetPlayer)
 end
 
 local function stopCarry()
-	NetworkGateway:Request("DELETE", "/carry/stop", {}):andThen(function()
+	NetworkGateway:Request("DELETE", "/carry/stop", {}):andThen(function(res)
+		local ok = res and res.Success
 		StarterGui:SetCore("SendNotification", {
-			Title = "Carry Stopped", Text = "You stopped carrying.", Duration = 2
+			Title = ok and "Carry Stopped" or "Carry Notice",
+			Text = ok and "You stopped carrying." or ((res and res.Message) or "Failed to stop carry."),
+			Duration = 2
 		})
 	end)
 end
