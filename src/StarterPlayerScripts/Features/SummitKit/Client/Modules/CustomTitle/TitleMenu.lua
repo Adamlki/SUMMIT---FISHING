@@ -16,7 +16,7 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Packages = Shared:WaitForChild("Packages")
 local Janitor = require(Packages:WaitForChild("Janitor"))
 
-local ImageTitleConfig = require(Shared:WaitForChild("Config"):WaitForChild("CustomTitle"):WaitForChild("ImageTitleConfig"))
+local ImageTitleConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("TitleConfig"))
 local Effects = require(script.Parent:WaitForChild("Effects"))
 local CustomTitleNotification = require(script.Parent.Parent:WaitForChild("Notifications"):WaitForChild("CustomTitleNotification"))
 

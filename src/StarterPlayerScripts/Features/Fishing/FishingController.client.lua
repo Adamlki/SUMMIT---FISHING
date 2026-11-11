@@ -22,7 +22,7 @@ local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
 
 -- ===== MODULES =====
 local modulesFolder = RepStorage:WaitForChild("FishingModules")
-local FishingConfig = require(RepStorage:WaitForChild("FishingConfig"))
+local FishingConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("FishingConfig"))
 local SoundManager = require(modulesFolder:WaitForChild("SoundManager"))
 local GUIManager = require(modulesFolder:WaitForChild("GUIManager"))
 local AnimationController = require(modulesFolder:WaitForChild("AnimationController"))

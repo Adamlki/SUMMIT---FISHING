@@ -15,8 +15,8 @@ local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Packages = Shared:WaitForChild("Packages")
 local Knit = require(Packages:WaitForChild("Knit"))
 
-local ImageTitleConfig = require(Shared:WaitForChild("Config"):WaitForChild("CustomTitle"):WaitForChild("ImageTitleConfig"))
-local RoleConfig = require(ReplicatedStorage:WaitForChild("RoleConfig"))
+local ImageTitleConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("TitleConfig"))
+local RoleConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("RoleConfig"))
 
 local CustomTitleRemotes = ReplicatedStorage:WaitForChild("CustomTitleRemotes")
 local GetTitleDataRF = CustomTitleRemotes:WaitForChild("GetTitleData")

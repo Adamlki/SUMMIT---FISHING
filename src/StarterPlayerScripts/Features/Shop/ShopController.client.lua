@@ -1,4 +1,4 @@
-local RoleConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("RoleConfig"))
+local RoleConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("Configs"):WaitForChild("RoleConfig"))
 --!strict
 -- ShopFeatureController: Master Store Controller (REST NetworkGateway Integrated)
 local Players = game:GetService("Players")
@@ -16,7 +16,7 @@ local FishingSystem = ReplicatedStorage:WaitForChild("FishingSystem", 15)
 local TrailSystem = ReplicatedStorage:WaitForChild("TrailSystem", 15)
 local rodAssets = FishingSystem:WaitForChild("Assets"):WaitForChild("Rod")
 
-local MasterConfig = require(FishingSystem:WaitForChild("ShopMasterConfig"))
+local MasterConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("ShopMasterConfig"))
 local TrailShopConfig = require(TrailSystem:WaitForChild("TrailShopConfig"))
 
 -- Legacy remotes kept for dual-stack compatibility

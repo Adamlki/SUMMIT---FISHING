@@ -1,1 +1,2 @@
-return require(game:GetService('ReplicatedStorage'):WaitForChild('Shared'):WaitForChild('Config'):WaitForChild('RoleConfig'))
+-- Compatibility proxy: canonical config lives in ReplicatedStorage.Configs.
+return require(game:GetService("ReplicatedStorage"):WaitForChild("Configs"):WaitForChild("RoleConfig"))

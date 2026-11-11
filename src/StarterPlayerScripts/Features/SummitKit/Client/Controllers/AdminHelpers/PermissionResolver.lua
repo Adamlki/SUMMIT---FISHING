@@ -1,6 +1,6 @@
 --!nonstrict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local RoleConfig = require(ReplicatedStorage:WaitForChild("RoleConfig"))
+local RoleConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("RoleConfig"))
 
 local RoleResolver = require(script.Parent.Parent.Parent.Modules.Overhead.Resolvers.RoleResolver)
 

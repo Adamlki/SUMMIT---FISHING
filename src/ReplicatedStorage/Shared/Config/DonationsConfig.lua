@@ -1,3 +1,3 @@
 --!nonstrict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-return require(ReplicatedStorage:WaitForChild("DonationConfig"))
+return require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("DonationConfig"))

@@ -13,7 +13,7 @@ local playerGui = localPlayer:WaitForChild("PlayerGui")
 
 -- == CONFIGURATION ==
 local FishingSystem = ReplicatedStorage:WaitForChild("FishingSystem")
-local FishingConfig = require(FishingSystem:WaitForChild("FishingConfig"))
+local FishingConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("FishingConfig"))
 local TransferSettings = FishingConfig.TransferSettings
 
 local MAX_DISTANCE = TransferSettings.MaxDistance

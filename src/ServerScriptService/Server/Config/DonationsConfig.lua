@@ -1,5 +1,7 @@
 --!nonstrict
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
+local DataStoreConfig = require(ServerScriptService:WaitForChild("Configs"):WaitForChild("DataStoreConfig"))
 
 local Shared = ReplicatedStorage.Shared
 local Packages = Shared.Packages
@@ -20,7 +22,7 @@ for _, tool in ipairs(ToolsConfig.Tools or {}) do
 end
 
 local DonationsConfig = {
-	DataStoreName = "DonationsLeaderboard_V1",
+	DataStoreName = DataStoreConfig.Stores.DonationsLeaderboard,
     MaxRows = 20,
     FetchLimit = 100,
     MinValue = 1,

@@ -5,7 +5,7 @@ local TextChatService = game:GetService("TextChatService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local FishingSystem = ReplicatedStorage:WaitForChild("FishingSystem")
-local FishingConfig = require(FishingSystem:WaitForChild("FishingConfig"))
+local FishingConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("FishingConfig"))
 local RarityColors = FishingConfig.RarityColors
 
 -- Wait for SendChatMessage event

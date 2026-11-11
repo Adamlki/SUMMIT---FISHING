@@ -22,7 +22,7 @@ end)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
-local RoleConfig = require(ReplicatedStorage:WaitForChild("RoleConfig"))
+local RoleConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("RoleConfig"))
 local CollectionService = game:GetService("CollectionService")
 local UserInputService = game:GetService("UserInputService")
 local SoundService = game:GetService("SoundService")
@@ -42,7 +42,7 @@ end
 -- MODULES & EVENTS
 -- ===================================================================
 local FishingSystem = ReplicatedStorage:WaitForChild("FishingSystem")
-local FishingConfig = require(FishingSystem:WaitForChild("FishingConfig"))
+local FishingConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("FishingConfig"))
 local RarityColors = FishingConfig.RarityColors
 
 local GlobalLuckVal = FishingSystem:WaitForChild("GlobalLuckMultiplier")

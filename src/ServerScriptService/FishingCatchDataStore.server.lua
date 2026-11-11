@@ -1,6 +1,8 @@
 local Players = game:GetService("Players")
 local DataStoreService = game:GetService("DataStoreService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ServerScriptService = game:GetService("ServerScriptService")
+local DataStoreConfig = require(ServerScriptService:WaitForChild("Configs"):WaitForChild("DataStoreConfig"))
 
 local FishingSystem = ReplicatedStorage:WaitForChild("FishingSystem")
 local FishingCatchSuccess = ReplicatedStorage:WaitForChild("FishingCatchSuccess")
@@ -11,8 +13,8 @@ local catchDataStore = nil
 local indexDataStore = nil
 
 pcall(function()
-    catchDataStore = DataStoreService:GetDataStore("FishingCatchDataStore")
-    indexDataStore = DataStoreService:GetDataStore("PlayerFishIndexDataStore")
+    catchDataStore = DataStoreService:GetDataStore(DataStoreConfig.Stores.FishingCatch)
+    indexDataStore = DataStoreService:GetDataStore(DataStoreConfig.Stores.PlayerFishIndex)
 end)
 
 -- In-memory cache for player indices & catch count
@@ -78,7 +80,7 @@ local function savePlayerData(player)
         if catch and typeof(catch.Value) == "number" then
             local targetVal = catch.Value
             local tries = 0
-            while tries < 3 do
+            while tries < DataStoreConfig.Retry.MaxAttempts do
                 tries += 1
                 -- H-01 Fix: UpdateAsync prevents race condition and atomic data loss
                 local ok, err = pcall(function()
@@ -90,7 +92,7 @@ local function savePlayerData(player)
                     end)
                 end)
                 if ok then break end
-                if tries < 3 then task.wait(0.5 * tries) end
+                if tries < DataStoreConfig.Retry.MaxAttempts then task.wait(DataStoreConfig.Retry.BackoffSeconds * tries) end
             end
         end
     end
@@ -98,7 +100,7 @@ local function savePlayerData(player)
     local idx = playerFishIndices[player]
     if idx and indexDataStore and type(idx) == "table" then
         local tries = 0
-        while tries < 3 do
+        while tries < DataStoreConfig.Retry.MaxAttempts do
             tries += 1
             -- H-01 Fix: UpdateAsync merges fish index without dropping discovered species
             local ok, err = pcall(function()
@@ -116,7 +118,7 @@ local function savePlayerData(player)
                 end)
             end)
             if ok then break end
-            if tries < 3 then task.wait(0.5 * tries) end
+            if tries < DataStoreConfig.Retry.MaxAttempts then task.wait(DataStoreConfig.Retry.BackoffSeconds * tries) end
         end
     end
 end

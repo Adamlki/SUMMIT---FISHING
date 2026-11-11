@@ -50,7 +50,7 @@ function RoleResolver.isModerator(config, player)
 end
 
 function RoleResolver.isVip(player, config)
-    local RoleConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("RoleConfig"))
+    local RoleConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("Configs"):WaitForChild("RoleConfig"))
     if RoleConfig and RoleConfig.IsOwner(player) then
         return true
     end

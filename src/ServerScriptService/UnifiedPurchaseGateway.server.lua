@@ -11,6 +11,7 @@ local DataStoreService = game:GetService("DataStoreService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local DataStoreConfig = require(ServerScriptService:WaitForChild("Configs"):WaitForChild("DataStoreConfig"))
 
 local FishingSystem = ReplicatedStorage:WaitForChild("FishingSystem")
 local StoreConfig = require(FishingSystem:WaitForChild("ExclusiveStoreConfig"))
@@ -29,7 +30,7 @@ local Knit = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Pack
 
 local receiptStore = nil
 pcall(function()
-	receiptStore = DataStoreService:GetDataStore("PurchaseReceiptLog_V1")
+	receiptStore = DataStoreService:GetDataStore(DataStoreConfig.Stores.PurchaseReceiptLog)
 end)
 
 local receiptCache = {}

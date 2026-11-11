@@ -1,4 +1,4 @@
-local RoleConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("RoleConfig"))
+local RoleConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("Configs"):WaitForChild("RoleConfig"))
 local RunService = game:GetService("RunService")
 -- FishData - FIXED VERSION (Leaderstats Conflict Solved)
 -- Key Changes:
@@ -6,6 +6,7 @@ local RunService = game:GetService("RunService")
 -- 2. Maintained optimizations (caching, throttling).
 
 local SSS = game:GetService("ServerScriptService")
+local DataStoreConfig = require(SSS:WaitForChild("Configs"):WaitForChild("DataStoreConfig"))
 local Players = game:GetService("Players")
 local ProfileService = require(SSS.Data.DataModule:WaitForChild("ProfileService"))
 local dataStoreService = game:GetService("DataStoreService")
@@ -80,7 +81,7 @@ local function NewScriptSignal()
 	return setmetatable({_head = nil, _listener_count = 0}, ScriptSignal)
 end
 
-local GAME_DATA_STORE_KEY = "PlayerGameData_V1"
+local GAME_DATA_STORE_KEY = DataStoreConfig.Stores.PlayerGameData
 
 local PlayerProfileTemplate = {
 	Coins = 0,
@@ -335,7 +336,7 @@ end
 
 function GameProfileService:HasRod(player, rodName)
 	if rodName == "Basic Rod" then return true end
-	local RoleConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("RoleConfig"))
+	local RoleConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("Configs"):WaitForChild("RoleConfig"))
 	if RoleConfig and RoleConfig.IsOwner(player) then return true end
 	local profile = self:GetProfile(player)
 	if not profile or not profile.Data.OwnedRods then return false end
@@ -348,7 +349,7 @@ function GameProfileService:HasRod(player, rodName)
 end
 
 function GameProfileService:GetOwnedRods(player)
-	local RoleConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("RoleConfig"))
+	local RoleConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("Configs"):WaitForChild("RoleConfig"))
 	if RoleConfig and RoleConfig.IsOwner(player) then
 		local rods = {}
 		local allRods = game:GetService("ServerStorage"):FindFirstChild("AllRods")
