@@ -47,15 +47,16 @@ local function removeFishTool(player, fishId)
 
 	-- Check in character (currently equipped)
 	if character then
-		local tool = character:FindFirstChildOfClass("Tool")
-		if tool and tool:FindFirstChild("FishId") and tool.FishId.Value == fishId then
-			-- CRITICAL FIX: Unequip the tool first to clear animation
-			if humanoid then
-				humanoid:UnequipTools()
-				task.wait(0.1) -- Give time for animation to clear
+		for _, tool in ipairs(character:GetChildren()) do
+			if tool:IsA("Tool") and tool:FindFirstChild("FishId") and tool.FishId.Value == fishId then
+				-- CRITICAL FIX: Unequip the tool first to clear animation
+				if humanoid then
+					humanoid:UnequipTools()
+					task.wait(0.1) -- Give time for animation to clear
+				end
+				tool:Destroy()
+				return true
 			end
-			tool:Destroy()
-			return true
 		end
 	end
 
@@ -67,7 +68,8 @@ local function removeFishTool(player, fishId)
 		end
 	end
 
-	return false -- Should not happen if validation is correct
+	-- Fish is data-only (custom inventory). No physical tool is required.
+	return true
 end
 
 -- Give new fish tool to receiver's inventory
@@ -243,15 +245,9 @@ TransferResponse.OnServerEvent:Connect(function(receiverPlayer, transferId, didA
 		return
 	end
 
-	-- Validation 5: Remove fish tool from sender (WITH ANIMATION FIX)
-	local toolRemoved = removeFishTool(senderPlayer, fishData.uniqueId)
-	if not toolRemoved then
-		-- This is weird, data exists but tool doesn't. Return data to sender
-		DataManager:AddExistingFish(senderPlayer, removedFishData)
-		warn(string.format("[TransferServer] Failed to remove tool %s from %s. Transfer cancelled.", fishData.name, senderPlayer.Name))
-		notify(senderPlayer, "Transfer error. Try unequipping and re-equipping the fish.", 3, Color3.fromRGB(255, 100, 100))
-		return
-	end
+	-- Validation 5: Remove the physical tool if it exists.
+	-- The profile data is authoritative, so a data-only fish must not block the transfer.
+	removeFishTool(senderPlayer, fishData.uniqueId)
 
 	-- == ALL VALIDATIONS PASSED, PERFORM TRANSFER ==
 

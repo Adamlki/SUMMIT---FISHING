@@ -15,15 +15,11 @@ local playerGui = localPlayer and (localPlayer:FindFirstChild("PlayerGui") or lo
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Packages = Shared:WaitForChild("Packages")
 local Janitor = require(Packages:WaitForChild("Janitor"))
+local NetworkGateway = require(Shared:WaitForChild("Network"):WaitForChild("NetworkGateway"))
 
 local ImageTitleConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("TitleConfig"))
 local Effects = require(script.Parent:WaitForChild("Effects"))
 local CustomTitleNotification = require(script.Parent.Parent:WaitForChild("Notifications"):WaitForChild("CustomTitleNotification"))
-
-local CustomTitleRemotes = ReplicatedStorage:WaitForChild("CustomTitleRemotes")
-local GetTitleDataRF = CustomTitleRemotes:WaitForChild("GetTitleData")
-local SetTitleRF = CustomTitleRemotes:WaitForChild("SetTitle")
-local ClearSlotRF = CustomTitleRemotes:WaitForChild("ClearSlot")
 
 local TitleMenu = {}
 
@@ -342,11 +338,16 @@ function TitleMenu.init()
 
 	local function fetchServerData()
 		task.spawn(function()
-			local ok, data = pcall(function()
-				return GetTitleDataRF:InvokeServer()
+			local ok, awaitedOk, response = pcall(function()
+				return NetworkGateway:Request("GET", "/title/data"):await()
 			end)
 
-			if ok and data and data.Success then
+			local data = nil
+			if ok and awaitedOk and type(response) == "table" and response.Success then
+				data = response.Data
+			end
+
+			if type(data) == "table" and data.Success then
 				serverData = data
 
 				-- Update Image cards unlock states (Translucent Lock Overlay)
@@ -622,18 +623,22 @@ function TitleMenu.init()
 		btnSetTitle.Active = false
 
 		task.spawn(function()
-			local ok, res = pcall(function()
-				return SetTitleRF:InvokeServer(currentSlot, isText and "Text" or "Image", payload)
+			local ok, awaitedOk, res = pcall(function()
+				return NetworkGateway:Request("PUT", "/title/set-slot", {
+					Slot = currentSlot,
+					TitleType = isText and "Text" or "Image",
+					Payload = payload,
+				}):await()
 			end)
 
 			btnSetTitle.Text = "SET TITLE"
 			btnSetTitle.Active = true
 
-			if ok and res and res.Success then
+			if ok and awaitedOk and type(res) == "table" and res.Success then
 				CustomTitleNotification.success(res.Message or "Title berhasil disimpan!", 3)
 				fetchServerData()
 			else
-				local errMsg = (res and res.Message) or "Gagal menyimpan title!"
+				local errMsg = (type(res) == "table" and res.Message) or "Gagal menyimpan title!"
 				CustomTitleNotification.error(errMsg, 3.5)
 			end
 		end)
@@ -648,14 +653,16 @@ function TitleMenu.init()
 		btnClearSlot.Active = false
 
 		task.spawn(function()
-			local ok, res = pcall(function()
-				return ClearSlotRF:InvokeServer(currentSlot)
+			local ok, awaitedOk, res = pcall(function()
+				return NetworkGateway:Request("DELETE", "/title/clear-slot", {
+					Slot = currentSlot,
+				}):await()
 			end)
 
 			btnClearSlot.Text = "CLEAR ROW"
 			btnClearSlot.Active = true
 
-			if ok and res and res.Success then
+			if ok and awaitedOk and type(res) == "table" and res.Success then
 				CustomTitleNotification.info(string.format("Slot %d berhasil dikosongkan!", currentSlot), 2.5)
 
 				local isText = (currentSlot <= 3)
@@ -670,7 +677,7 @@ function TitleMenu.init()
 
 				fetchServerData()
 			else
-				local errMsg = (res and res.Message) or "Gagal menghapus title!"
+				local errMsg = (type(res) == "table" and res.Message) or "Gagal menghapus title!"
 				CustomTitleNotification.error(errMsg, 3)
 			end
 		end)
