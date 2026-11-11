@@ -1,12 +1,14 @@
 local RoleConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("RoleConfig"))
 --!strict
--- RodShopGuiServer: Authoritative Rod Purchases, Equipping, Catalog & Store Handlers
+-- RodShopGuiServer: Authoritative Rod Purchases, Equipping, Catalog & Store Handlers (REST + DUAL-STACK)
 local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local MarketplaceService = game:GetService("MarketplaceService")
 local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
+
+local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 
 local FishingSystem = ReplicatedStorage:WaitForChild("FishingSystem")
 local rodAssetsFolder = FishingSystem:WaitForChild("Assets"):WaitForChild("Rod")
@@ -138,11 +140,10 @@ for _, p in ipairs(Players:GetPlayers()) do
 end
 
 -- ===================================================================
--- REMOTE FUNCTION HANDLERS
+-- CORE SHOP LOGIC (REUSABLE BY REST & LEGACY)
 -- ===================================================================
 
--- 1. GET SHOP DATA
-rfGetShopData.OnServerInvoke = function(player: Player)
+local function getShopData(player: Player)
 	local isOwner = RoleConfig.IsOwner(player)
 	if isOwner then
 		local MasterConfig = require(ReplicatedStorage.FishingSystem.ShopMasterConfig)
@@ -216,21 +217,15 @@ rfGetShopData.OnServerInvoke = function(player: Player)
 	}
 end
 
--- 2. EQUIP ROD
-rfEquipRod.OnServerInvoke = function(player: Player, rodName: string)
-	if type(rodName) ~= "string" then return false end
-	return equipRodToCharacter(player, rodName)
-end
-
--- 3. BUY ROD (COIN)
-reRequestPurchase.OnServerEvent:Connect(function(player: Player, rodName: string)
-	if type(rodName) ~= "string" then return end
+local function buyRodWithCoins(player: Player, rodName: string)
 	local cfg = RodShopConfig[rodName]
-	if not cfg or cfg.Type == "Staff" then return end
+	if not cfg or cfg.Type == "Staff" then
+		return { success = false, message = "Joran tidak tersedia untuk dibeli." }
+	end
 
 	if GameProfileService:HasRod(player, rodName) then
 		notify(player, "Kamu sudah memiliki joran ini!", Color3.fromRGB(255, 200, 100))
-		return
+		return { success = false, message = "Kamu sudah memiliki joran ini!" }
 	end
 
 	if cfg.Type == "VIP" then
@@ -246,13 +241,13 @@ reRequestPurchase.OnServerEvent:Connect(function(player: Player, rodName: string
 		end
 		if not hasVip then
 			notify(player, "Joran ini khusus untuk pemilik VIP Pack!", Color3.fromRGB(255, 200, 40))
-			return
+			return { success = false, message = "Joran ini khusus untuk pemilik VIP Pack!" }
 		end
 	end
 
 	if cfg.Type == "Gamepass" then
 		notify(player, "Joran ini hanya dapat diperoleh melalui Gamepass!", Color3.fromRGB(255, 200, 40))
-		return
+		return { success = false, message = "Joran ini hanya dapat diperoleh melalui Gamepass!" }
 	end
 
 	local price = cfg.CoinPrice or 0
@@ -261,17 +256,19 @@ reRequestPurchase.OnServerEvent:Connect(function(player: Player, rodName: string
 		if success then
 			giveRod(player, rodName)
 			rePurchaseSuccess:FireClient(player)
+			return { success = true, rodName = rodName, remainingCoins = remaining }
 		else
 			notify(player, "Koin kamu tidak cukup! Butuh " .. tostring(price) .. " Koin.", Color3.fromRGB(255, 100, 100))
+			return { success = false, message = "Koin kamu tidak cukup!" }
 		end
 	else
 		giveRod(player, rodName)
 		rePurchaseSuccess:FireClient(player)
+		return { success = true, rodName = rodName }
 	end
-end)
+end
 
--- 4. BUY COIN PACK
-rfBuyCoinPack.OnServerInvoke = function(player: Player, packName: string)
+local function buyCoinPack(player: Player, packName: string)
 	local pack = StoreConfig.CoinPacks and StoreConfig.CoinPacks[packName]
 	if not pack then return { success = false, message = "Paket koin tidak ditemukan" } end
 
@@ -284,8 +281,7 @@ rfBuyCoinPack.OnServerInvoke = function(player: Player, packName: string)
 	return { success = false, message = "Paket koin belum dikonfigurasi di Roblox Dashboard (ProductId belum di-assign)." }
 end
 
--- 5. BUY SERVER LUCK
-rfBuyServerLuck.OnServerInvoke = function(player: Player)
+local function buyServerLuck(player: Player)
 	local ServerLuckManager = require(ServerScriptService.FishingServerScripts.ServerLuckManager)
 	local ServerLuckPurchases = FishingSystem:WaitForChild("ServerLuckPurchases") :: IntValue
 	local cfg = StoreConfig.ServerLuckBoost
@@ -304,14 +300,102 @@ rfBuyServerLuck.OnServerInvoke = function(player: Player)
 	return { success = false, message = "Server Luck Boost tier ini belum dikonfigurasi di Roblox Dashboard (ProductId belum di-assign)." }
 end
 
--- 6. REQUEST GIFT
-local lastGiftTime = {}
-Players.PlayerRemoving:Connect(function(player)
-	lastGiftTime[player] = nil
+-- ===================================================================
+-- REST ROUTES (NETWORK GATEWAY)
+-- ===================================================================
+
+NetworkGateway:RegisterRoute("GET", "/shop/rods", function(player)
+	return {
+		Success = true,
+		StatusCode = 200,
+		Data = getShopData(player)
+	}
+end, { rateLimitSeconds = 0.5 })
+
+NetworkGateway:RegisterRoute("PUT", "/shop/equip-rod", function(player, payload)
+	if type(payload) ~= "table" or type(payload.RodName) ~= "string" then
+		return { Success = false, StatusCode = 400, ErrorCode = "INVALID_PAYLOAD", Message = "RodName is required." }
+	end
+	local ok = equipRodToCharacter(player, payload.RodName)
+	return {
+		Success = ok,
+		StatusCode = if ok then 200 else 400,
+		Message = if ok then "Joran berhasil dipakai" else "Gagal memakai joran"
+	}
+end, { rateLimitSeconds = 0.5 })
+
+NetworkGateway:RegisterRoute("POST", "/shop/buy-rod", function(player, payload)
+	if type(payload) ~= "table" or type(payload.RodName) ~= "string" then
+		return { Success = false, StatusCode = 400, ErrorCode = "INVALID_PAYLOAD", Message = "RodName is required." }
+	end
+	local res = buyRodWithCoins(player, payload.RodName)
+	return {
+		Success = res.success,
+		StatusCode = if res.success then 200 else 400,
+		Data = res,
+		Message = res.message
+	}
+end, { rateLimitSeconds = 0.5 })
+
+NetworkGateway:RegisterRoute("POST", "/shop/buy-coin-pack", function(player, payload)
+	if type(payload) ~= "table" or type(payload.PackName) ~= "string" then
+		return { Success = false, StatusCode = 400, ErrorCode = "INVALID_PAYLOAD", Message = "PackName is required." }
+	end
+	local res = buyCoinPack(player, payload.PackName)
+	return {
+		Success = res.success,
+		StatusCode = if res.success then 200 else 400,
+		Data = res,
+		Message = res.message
+	}
+end, { rateLimitSeconds = 0.5 })
+
+NetworkGateway:RegisterRoute("POST", "/shop/buy-server-luck", function(player)
+	local res = buyServerLuck(player)
+	return {
+		Success = res.success,
+		StatusCode = if res.success then 200 else 400,
+		Data = res,
+		Message = res.message
+	}
+end, { rateLimitSeconds = 0.5 })
+
+NetworkGateway:RegisterRoute("POST", "/shop/gift", function(player, payload)
+	return {
+		Success = false,
+		StatusCode = 403,
+		ErrorCode = "FEATURE_DISABLED",
+		Message = "Fitur gift saat ini belum tersedia dan memerlukan konfigurasi Developer Product resmi pada Roblox Dashboard."
+	}
+end, { rateLimitSeconds = 1 })
+
+-- ===================================================================
+-- DUAL-STACK LEGACY HANDLERS
+-- ===================================================================
+
+rfGetShopData.OnServerInvoke = function(player: Player)
+	return getShopData(player)
+end
+
+rfEquipRod.OnServerInvoke = function(player: Player, rodName: string)
+	if type(rodName) ~= "string" then return false end
+	return equipRodToCharacter(player, rodName)
+end
+
+reRequestPurchase.OnServerEvent:Connect(function(player: Player, rodName: string)
+	if type(rodName) ~= "string" then return end
+	buyRodWithCoins(player, rodName)
 end)
 
+rfBuyCoinPack.OnServerInvoke = function(player: Player, packName: string)
+	return buyCoinPack(player, packName)
+end
+
+rfBuyServerLuck.OnServerInvoke = function(player: Player)
+	return buyServerLuck(player)
+end
+
 rfRequestGift.OnServerInvoke = function(player: Player, itemCategory: string, itemId: string, targetUserId: number)
-	-- H-03 Fix: Mock gift dinonaktifkan secara total untuk mencegah eksploitasi dan pemberian reward tanpa validasi transaksi Developer Product
 	return {
 		success = false,
 		message = "Fitur gift saat ini belum tersedia dan memerlukan konfigurasi Developer Product resmi pada Roblox Dashboard."

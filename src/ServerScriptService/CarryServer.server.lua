@@ -11,6 +11,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 
 local REMOTE_NAME = "CarryRemote"
 local CarryRemote = ReplicatedStorage:FindFirstChild(REMOTE_NAME)
@@ -738,55 +739,152 @@ local function startCarry(carrier, target)
 	return true
 end
 
-CarryRemote.OnServerEvent:Connect(function(player, action, data)
-	if action == "Request" then
-		local targetId = data and data.targetId
-		if type(targetId) ~= "number" then return end
-		local target = Players:GetPlayerByUserId(targetId)
-		if not target or target == player then return end
-		local _, cHRP = getCharHRP(player) local _, tHRP = getCharHRP(target)
-		if not (cHRP and tHRP) then return end
-		local distance = (cHRP.Position - tHRP.Position).Magnitude
-		if distance > MAX_DISTANCE then CarryRemote:FireClient(player, "TooFar", { targetId = targetId }) return end
-		local extra = countCarried(target)
-		if (countCarried(player) + 1 + extra) > MAX_CARRY then CarryRemote:FireClient(player, "Limit", { max = MAX_CARRY, reason = "transfer" }) return end
-		if not canCarrierRequest(player) or not targetAvailable(target) then CarryRemote:FireClient(player, "Busy", {}) return end
-		if hasPendingIncoming(player) or hasPendingOutgoing(player) or pending[target.UserId] then CarryRemote:FireClient(player, "Busy", {}) return end
-		pending[target.UserId] = { requester = player, time = os.clock() }
-		CarryRemote:FireClient(target, "Prompt", { fromId = player.UserId, fromName = player.DisplayName })
-	elseif action == "Response" then
-		local accept = data and data.accept == true
-		local requesterId = data and data.requesterId
-		if type(requesterId) ~= "number" then return end
-		local requester = Players:GetPlayerByUserId(requesterId)
-		if not requester then return end
-		local pend = pending[player.UserId]
-		if not pend or pend.requester ~= requester then return end
-		pending[player.UserId] = nil
-		if not accept then
-			CarryRemote:FireClient(requester, "Declined", { targetId = player.UserId })
-			CarryRemote:FireClient(player, "PromptClose", {}) return
-		end
-		local ok2, err2 = startCarry(requester, player)
-		if not ok2 then
-			if tostring(err2) == "limit_transfer" then
-				CarryRemote:FireClient(requester, "Limit", { max = MAX_CARRY, reason = "transfer" })
-				CarryRemote:FireClient(player, "Failed", { reason = "limit_transfer" })
-			else
-				CarryRemote:FireClient(requester, "Failed", { reason = err2 })
-				CarryRemote:FireClient(player, "Failed", { reason = err2 })
-			end
-		end
-	elseif action == "Stop" then
-		local targetId = data and data.targetId
-		if type(targetId) == "number" then
-			local t = Players:GetPlayerByUserId(targetId)
-			if t and carryingByCarrier[player.UserId] and carryingByCarrier[player.UserId][targetId] then
-				detachPair(player, t, "stop") return
-			end
-		end
-		detachIfAny(player, "stop")
+-- ===================================================================
+-- CORE CARRY ACTIONS (REUSABLE BY REST & LEGACY)
+-- ===================================================================
+
+local function carrySuccess(data, message)
+	return {
+		Success = true,
+		StatusCode = 200,
+		Data = data,
+		Message = message or "OK",
+	}
+end
+
+local function carryFailure(message, data)
+	return {
+		Success = false,
+		StatusCode = 400,
+		ErrorCode = "CARRY_FAILED",
+		Data = data,
+		Message = message,
+	}
+end
+
+local function requestCarry(player, targetId)
+	if type(targetId) ~= "number" then
+		return carryFailure("TargetId must be a number.")
 	end
+	local target = Players:GetPlayerByUserId(targetId)
+	if not target or target == player then
+		return carryFailure("Target is unavailable.")
+	end
+	local _, cHRP = getCharHRP(player)
+	local _, tHRP = getCharHRP(target)
+	if not (cHRP and tHRP) then
+		return carryFailure("Character is missing.")
+	end
+	local distance = (cHRP.Position - tHRP.Position).Magnitude
+	if distance > MAX_DISTANCE then
+		CarryRemote:FireClient(player, "TooFar", { targetId = targetId })
+		return carryFailure("Target is too far away.")
+	end
+	local extra = countCarried(target)
+	if (countCarried(player) + 1 + extra) > MAX_CARRY then
+		CarryRemote:FireClient(player, "Limit", { max = MAX_CARRY, reason = "transfer" })
+		return carryFailure("Carry limit reached.")
+	end
+	if not canCarrierRequest(player) or not targetAvailable(target) then
+		CarryRemote:FireClient(player, "Busy", {})
+		return carryFailure("Carrier or target is busy.")
+	end
+	if hasPendingIncoming(player) or hasPendingOutgoing(player) or pending[target.UserId] then
+		CarryRemote:FireClient(player, "Busy", {})
+		return carryFailure("A carry request is already pending.")
+	end
+
+	pending[target.UserId] = { requester = player, time = os.clock() }
+	CarryRemote:FireClient(target, "Prompt", { fromId = player.UserId, fromName = player.DisplayName })
+	return carrySuccess({ TargetId = targetId }, "Carry request sent.")
+end
+
+local function respondCarry(player, requesterId, accept)
+	if type(requesterId) ~= "number" then
+		return carryFailure("RequesterId must be a number.")
+	end
+	local requester = Players:GetPlayerByUserId(requesterId)
+	if not requester then
+		return carryFailure("Requester is unavailable.")
+	end
+	local pend = pending[player.UserId]
+	if not pend or pend.requester ~= requester then
+		return carryFailure("No pending carry request from this player.")
+	end
+	pending[player.UserId] = nil
+
+	if accept ~= true then
+		CarryRemote:FireClient(requester, "Declined", { targetId = player.UserId })
+		CarryRemote:FireClient(player, "PromptClose", {})
+		return carrySuccess({ Accepted = false }, "Carry request declined.")
+	end
+
+	local ok, err = startCarry(requester, player)
+	if not ok then
+		if tostring(err) == "limit_transfer" then
+			CarryRemote:FireClient(requester, "Limit", { max = MAX_CARRY, reason = "transfer" })
+			CarryRemote:FireClient(player, "Failed", { reason = "limit_transfer" })
+		else
+			CarryRemote:FireClient(requester, "Failed", { reason = err })
+			CarryRemote:FireClient(player, "Failed", { reason = err })
+		end
+		return carryFailure("Carry failed: " .. tostring(err), { Reason = tostring(err) })
+	end
+
+	return carrySuccess({ Accepted = true }, "Carry started.")
+end
+
+local function stopCarry(player, targetId)
+	if type(targetId) == "number" then
+		local target = Players:GetPlayerByUserId(targetId)
+		if target and carryingByCarrier[player.UserId] and carryingByCarrier[player.UserId][targetId] then
+			detachPair(player, target, "stop")
+			return carrySuccess({ TargetId = targetId }, "Carry stopped.")
+		end
+	end
+
+	detachIfAny(player, "stop")
+	return carrySuccess(nil, "Carry stopped.")
+end
+
+-- Dual-stack legacy event
+CarryRemote.OnServerEvent:Connect(function(player, action, data)
+	local payload = type(data) == "table" and data or nil
+	if action == "Request" then
+		requestCarry(player, payload and payload.targetId)
+	elseif action == "Response" then
+		respondCarry(player, payload and payload.requesterId, payload and payload.accept == true)
+	elseif action == "Stop" then
+		stopCarry(player, payload and payload.targetId)
+	end
+end)
+
+-- ===================================================================
+-- REST ROUTES (NETWORK GATEWAY)
+-- ===================================================================
+
+NetworkGateway:RegisterRoute("POST", "/carry/request", function(player, payload)
+	if type(payload) ~= "table" or type(payload.TargetId) ~= "number" then
+		return carryFailure("TargetId must be a number.")
+	end
+	return requestCarry(player, payload.TargetId)
+end)
+
+NetworkGateway:RegisterRoute("POST", "/carry/response", function(player, payload)
+	if type(payload) ~= "table" or type(payload.RequesterId) ~= "number" or type(payload.Accept) ~= "boolean" then
+		return carryFailure("RequesterId and Accept are required.")
+	end
+	return respondCarry(player, payload.RequesterId, payload.Accept)
+end)
+
+NetworkGateway:RegisterRoute("DELETE", "/carry/stop", function(player, payload)
+	if payload ~= nil and type(payload) ~= "table" then
+		return carryFailure("Payload must be a table.")
+	end
+	if payload and payload.TargetId ~= nil and type(payload.TargetId) ~= "number" then
+		return carryFailure("TargetId must be a number.")
+	end
+	return stopCarry(player, payload and payload.TargetId)
 end)
 
 local function onCharacterAdded(p, char)

@@ -8,6 +8,8 @@ local MarketplaceService = game:GetService("MarketplaceService")
 local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
+local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
+
 local TrailSystem = ReplicatedStorage:WaitForChild("TrailSystem", 15)
 local TrailShopConfig = require(TrailSystem:WaitForChild("TrailShopConfig"))
 local Remotes = TrailSystem:WaitForChild("Remotes")
@@ -18,7 +20,6 @@ local BuyTrailWithCoinsRF = Remotes:WaitForChild("BuyTrailWithCoins") :: RemoteF
 local BuyTrailWithRobuxRF = Remotes:WaitForChild("BuyTrailWithRobux") :: RemoteFunction
 local EquipTrailRF = Remotes:WaitForChild("EquipTrail") :: RemoteFunction
 local UnequipTrailRF = Remotes:WaitForChild("UnequipTrail") :: RemoteFunction
-local TrailUpdatedRE = Remotes:WaitForChild("TrailUpdated") :: RemoteEvent
 
 local GameProfileService = require(ServerScriptService.Data.PetCore:WaitForChild("FishData"))
 
@@ -26,6 +27,32 @@ local lastTrailAction = {}
 Players.PlayerRemoving:Connect(function(player)
 	lastTrailAction[player] = nil
 end)
+
+-- ===================================================================
+-- RESPONSE + BROADCAST HELPERS
+-- ===================================================================
+
+local function respondSuccess(data: any, message: string?)
+	return {
+		Success = true,
+		StatusCode = 200,
+		Data = data,
+		Message = message or "OK",
+	}
+end
+
+local function respondFailure(statusCode: number, errorCode: string, message: string)
+	return {
+		Success = false,
+		StatusCode = statusCode,
+		ErrorCode = errorCode,
+		Message = message,
+	}
+end
+
+local function broadcastTrailUpdated(player: Player, trailId: string)
+	NetworkGateway:Broadcast("Trail/Updated", { TrailId = trailId }, player)
+end
 
 -- ===================================================================
 -- VISUAL ASSETTRAILS ATTACHMENT & SPEED ENGINE
@@ -151,24 +178,22 @@ for _, p in ipairs(Players:GetPlayers()) do
 end
 
 -- ===================================================================
--- REMOTE HANDLERS
+-- CORE TRAIL LOGIC (REUSABLE BY REST & LEGACY)
 -- ===================================================================
 
-GetTrailDataRF.OnServerInvoke = function(player: Player)
-	local owned = GameProfileService:GetOwnedTrails(player) or {}
-	local equipped = GameProfileService:GetEquippedTrail(player)
+local function getTrailData(player: Player)
 	return {
-		owned = owned,
-		equipped = equipped or "",
+		Owned = GameProfileService:GetOwnedTrails(player) or {},
+		Equipped = GameProfileService:GetEquippedTrail(player) or "",
 	}
 end
 
-BuyTrailWithCoinsRF.OnServerInvoke = function(player: Player, trailId: string)
+local function buyTrailWithCoins(player: Player, trailId: string)
 	if lastTrailAction[player] and os.clock() - lastTrailAction[player] < 0.5 then
 		return { success = false, message = "Terlalu cepat, coba lagi sebentar." }
 	end
 	lastTrailAction[player] = os.clock()
-	if type(trailId) ~= "string" then
+	if type(trailId) ~= "string" or trailId == "" then
 		return { success = false, message = "ID Trail tidak valid" }
 	end
 
@@ -199,26 +224,23 @@ BuyTrailWithCoinsRF.OnServerInvoke = function(player: Player, trailId: string)
 		applyPlayerTrail(player, player.Character, trailId)
 	end
 
-	TrailUpdatedRE:FireClient(player, {
-		owned = GameProfileService:GetOwnedTrails(player),
-		equipped = trailId,
-		coins = remainingCoins,
-	})
+	broadcastTrailUpdated(player, trailId)
 
 	return {
 		success = true,
 		equipped = trailId,
 		coins = remainingCoins,
+		owned = GameProfileService:GetOwnedTrails(player),
 		message = "Berhasil membeli dan memakai " .. itemConfig.Name .. "!",
 	}
 end
 
-BuyTrailWithRobuxRF.OnServerInvoke = function(player: Player, trailId: string)
+local function buyTrailWithRobux(player: Player, trailId: string)
 	if lastTrailAction[player] and os.clock() - lastTrailAction[player] < 0.5 then
 		return { success = false, message = "Terlalu cepat, coba lagi sebentar." }
 	end
 	lastTrailAction[player] = os.clock()
-	if type(trailId) ~= "string" then
+	if type(trailId) ~= "string" or trailId == "" then
 		return { success = false, message = "ID Trail tidak valid" }
 	end
 
@@ -234,36 +256,34 @@ BuyTrailWithRobuxRF.OnServerInvoke = function(player: Player, trailId: string)
 	if itemConfig.ProductId and itemConfig.ProductId > 0 then
 		MarketplaceService:PromptProductPurchase(player, itemConfig.ProductId)
 		return { success = true, prompted = true }
-	else
-		-- Studio simulation / Fallback
-			if not RunService:IsStudio() then
-				return { success = false, message = "Pembelian Robux untuk trail ini belum tersedia saat ini." }
-			end
-		GameProfileService:AddTrail(player, trailId)
-		GameProfileService:SetEquippedTrail(player, trailId)
-		if player.Character then
-			applyPlayerTrail(player, player.Character, trailId)
-		end
-
-		TrailUpdatedRE:FireClient(player, {
-			owned = GameProfileService:GetOwnedTrails(player),
-			equipped = trailId,
-		})
-
-		return {
-			success = true,
-			equipped = trailId,
-			message = "Berhasil membeli dan memakai " .. itemConfig.Name .. "!",
-		}
 	end
+
+	-- Studio simulation / Fallback
+	if not RunService:IsStudio() then
+		return { success = false, message = "Pembelian Robux untuk trail ini belum tersedia saat ini." }
+	end
+
+	GameProfileService:AddTrail(player, trailId)
+	GameProfileService:SetEquippedTrail(player, trailId)
+	if player.Character then
+		applyPlayerTrail(player, player.Character, trailId)
+	end
+
+	broadcastTrailUpdated(player, trailId)
+
+	return {
+		success = true,
+		equipped = trailId,
+		message = "Berhasil membeli dan memakai " .. itemConfig.Name .. "!",
+	}
 end
 
-EquipTrailRF.OnServerInvoke = function(player: Player, trailId: string)
+local function equipTrail(player: Player, trailId: string)
 	if lastTrailAction[player] and os.clock() - lastTrailAction[player] < 0.5 then
 		return { success = false, message = "Terlalu cepat, coba lagi sebentar." }
 	end
 	lastTrailAction[player] = os.clock()
-	if type(trailId) ~= "string" then
+	if type(trailId) ~= "string" or trailId == "" then
 		return { success = false, message = "ID tidak valid" }
 	end
 
@@ -277,15 +297,11 @@ EquipTrailRF.OnServerInvoke = function(player: Player, trailId: string)
 	end
 
 	GameProfileService:SetEquippedTrail(player, trailId)
-
 	if player.Character then
 		applyPlayerTrail(player, player.Character, trailId)
 	end
 
-	TrailUpdatedRE:FireClient(player, {
-		owned = GameProfileService:GetOwnedTrails(player),
-		equipped = trailId,
-	})
+	broadcastTrailUpdated(player, trailId)
 
 	return {
 		success = true,
@@ -294,27 +310,105 @@ EquipTrailRF.OnServerInvoke = function(player: Player, trailId: string)
 	}
 end
 
-UnequipTrailRF.OnServerInvoke = function(player: Player)
+local function unequipTrail(player: Player)
 	if lastTrailAction[player] and os.clock() - lastTrailAction[player] < 0.5 then
 		return { success = false, message = "Terlalu cepat, coba lagi sebentar." }
 	end
 	lastTrailAction[player] = os.clock()
-	GameProfileService:SetEquippedTrail(player, "")
 
+	GameProfileService:SetEquippedTrail(player, "")
 	if player.Character then
 		applyPlayerTrail(player, player.Character, "")
 	end
 
-	TrailUpdatedRE:FireClient(player, {
-		owned = GameProfileService:GetOwnedTrails(player),
-		equipped = "",
-	})
+	broadcastTrailUpdated(player, "")
 
 	return {
 		success = true,
 		equipped = "",
 		message = "Trail berhasil dilepas!",
 	}
+end
+
+-- ===================================================================
+-- REST ROUTES (NETWORK GATEWAY)
+-- ===================================================================
+
+NetworkGateway:RegisterRoute("GET", "/trail/data", function(player)
+	return respondSuccess(getTrailData(player), "Trail data loaded.")
+end, { rateLimitSeconds = 0.5 })
+
+NetworkGateway:RegisterRoute("POST", "/trail/buy-coins", function(player, payload)
+	if type(payload) ~= "table" or type(payload.TrailId) ~= "string" or payload.TrailId == "" then
+		return respondFailure(400, "INVALID_PAYLOAD", "TrailId is required.")
+	end
+
+	local res = buyTrailWithCoins(player, payload.TrailId)
+	if not res.success then
+		return respondFailure(400, "TRAIL_PURCHASE_FAILED", res.message or "Trail purchase failed.")
+	end
+
+	return respondSuccess({
+		Owned = res.owned,
+		Equipped = res.equipped,
+		Coins = res.coins,
+	}, res.message)
+end, { rateLimitSeconds = 0.5 })
+
+NetworkGateway:RegisterRoute("PUT", "/trail/equip", function(player, payload)
+	if type(payload) ~= "table" or type(payload.TrailId) ~= "string" or payload.TrailId == "" then
+		return respondFailure(400, "INVALID_PAYLOAD", "TrailId is required.")
+	end
+
+	local res = equipTrail(player, payload.TrailId)
+	if not res.success then
+		return respondFailure(400, "TRAIL_EQUIP_FAILED", res.message or "Trail equip failed.")
+	end
+
+	return respondSuccess({
+		Owned = GameProfileService:GetOwnedTrails(player) or {},
+		Equipped = res.equipped,
+	}, res.message)
+end, { rateLimitSeconds = 0.5 })
+
+NetworkGateway:RegisterRoute("DELETE", "/trail/unequip", function(player)
+	local res = unequipTrail(player)
+	if not res.success then
+		return respondFailure(400, "TRAIL_UNEQUIP_FAILED", res.message or "Trail unequip failed.")
+	end
+
+	return respondSuccess({
+		Owned = GameProfileService:GetOwnedTrails(player) or {},
+		Equipped = "",
+	}, res.message)
+end, { rateLimitSeconds = 0.5 })
+
+-- ===================================================================
+-- DUAL-STACK LEGACY HANDLERS
+-- ===================================================================
+
+GetTrailDataRF.OnServerInvoke = function(player: Player)
+	local data = getTrailData(player)
+	return {
+		owned = data.Owned,
+		equipped = data.Equipped,
+	}
+end
+
+BuyTrailWithCoinsRF.OnServerInvoke = function(player: Player, trailId: string)
+	return buyTrailWithCoins(player, trailId)
+end
+
+BuyTrailWithRobuxRF.OnServerInvoke = function(player: Player, trailId: string)
+	return buyTrailWithRobux(player, trailId)
+end
+
+EquipTrailRF.OnServerInvoke = function(player: Player, trailId: string)
+	return equipTrail(player, trailId)
+end
+
+UnequipTrailRF.OnServerInvoke = function(player: Player)
+	return unequipTrail(player)
 end
 
 -- ===================================================================
@@ -339,10 +433,7 @@ grantTrailBindable.OnInvoke = function(player: Player, productId: number): boole
 			if player.Character then
 				applyPlayerTrail(player, player.Character, id)
 			end
-			TrailUpdatedRE:FireClient(player, {
-				owned = GameProfileService:GetOwnedTrails(player),
-				equipped = id,
-			})
+			broadcastTrailUpdated(player, id)
 			return true
 		end
 	end

@@ -9,6 +9,7 @@ local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TextService = game:GetService("TextService")
 local MarketplaceService = game:GetService("MarketplaceService")
+local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 
 local Shared = ReplicatedStorage:WaitForChild("Shared")
 local Packages = Shared:WaitForChild("Packages")
@@ -181,7 +182,7 @@ end
 -- Remote Functions
 -- ──────────────────────────────────────────────────────────────────────────────
 
-GetTitleDataRF.OnServerInvoke = function(player)
+local function getTitleData(player)
     local waited = 0
     while not getOverheadProfile(player) and waited < 10 do
         task.wait(0.5)
@@ -241,7 +242,7 @@ GetTitleDataRF.OnServerInvoke = function(player)
     }
 end
 
-SetTitleRF.OnServerInvoke = function(player, slot, titleType, payload, targetUserId)
+local function setTitleSlot(player, slot, titleType, payload, targetUserId)
     slot = tonumber(slot)
     if not slot or slot < 1 or slot > 6 then
         return { Success = false, Message = "Slot title tidak valid (1-6)!" }
@@ -404,7 +405,7 @@ SetTitleRF.OnServerInvoke = function(player, slot, titleType, payload, targetUse
     end
 end
 
-ClearSlotRF.OnServerInvoke = function(player, slot, targetUserId)
+local function clearTitleSlot(player, slot, targetUserId)
     slot = tonumber(slot)
     if not slot or slot < 1 or slot > 6 then
         return { Success = false, Message = "Slot baris tidak valid (1-6)!" }
@@ -435,6 +436,70 @@ ClearSlotRF.OnServerInvoke = function(player, slot, targetUserId)
 
     return { Success = true, Message = string.format("Title Baris %d berhasil dihapus!", slot) }
 end
+
+-- ──────────────────────────────────────────────────────────────────────────────
+-- Dual-Stack Legacy Remotes
+-- ──────────────────────────────────────────────────────────────────────────────
+
+GetTitleDataRF.OnServerInvoke = function(player)
+    return getTitleData(player)
+end
+
+SetTitleRF.OnServerInvoke = function(player, slot, titleType, payload, targetUserId)
+    return setTitleSlot(player, slot, titleType, payload, targetUserId)
+end
+
+ClearSlotRF.OnServerInvoke = function(player, slot, targetUserId)
+    return clearTitleSlot(player, slot, targetUserId)
+end
+
+-- ──────────────────────────────────────────────────────────────────────────────
+-- REST Routes (Network Gateway)
+-- ──────────────────────────────────────────────────────────────────────────────
+
+NetworkGateway:RegisterRoute("GET", "/title/data", function(player)
+    local data = getTitleData(player)
+    return {
+        Success = true,
+        StatusCode = 200,
+        Data = data,
+        Message = "Title data loaded.",
+    }
+end, { rateLimitSeconds = 1 })
+
+NetworkGateway:RegisterRoute("PUT", "/title/set-slot", function(player, payload)
+    if type(payload) ~= "table" then
+        return { Success = false, StatusCode = 400, Message = "Payload must be a table." }
+    end
+    if payload.TargetUserId ~= nil and type(payload.TargetUserId) ~= "number" then
+        return { Success = false, StatusCode = 400, Message = "TargetUserId must be a number." }
+    end
+
+    local result = setTitleSlot(player, payload.Slot, payload.TitleType, payload.Payload, payload.TargetUserId)
+    return {
+        Success = result.Success == true,
+        StatusCode = result.Success and 200 or 400,
+        Data = result,
+        Message = result.Message,
+    }
+end, { rateLimitSeconds = 1 })
+
+NetworkGateway:RegisterRoute("DELETE", "/title/clear-slot", function(player, payload)
+    if type(payload) ~= "table" then
+        return { Success = false, StatusCode = 400, Message = "Payload must be a table." }
+    end
+    if payload.TargetUserId ~= nil and type(payload.TargetUserId) ~= "number" then
+        return { Success = false, StatusCode = 400, Message = "TargetUserId must be a number." }
+    end
+
+    local result = clearTitleSlot(player, payload.Slot, payload.TargetUserId)
+    return {
+        Success = result.Success == true,
+        StatusCode = result.Success and 200 or 400,
+        Data = result,
+        Message = result.Message,
+    }
+end, { rateLimitSeconds = 1 })
 
 -- ──────────────────────────────────────────────────────────────────────────────
 -- Reconcile Profile on Join (Image Titles sync)

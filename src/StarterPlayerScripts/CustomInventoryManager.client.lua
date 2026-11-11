@@ -21,6 +21,7 @@ end)
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 local RoleConfig = require(ReplicatedStorage:WaitForChild("RoleConfig"))
 local CollectionService = game:GetService("CollectionService")
 local UserInputService = game:GetService("UserInputService")
@@ -44,16 +45,6 @@ local FishingSystem = ReplicatedStorage:WaitForChild("FishingSystem")
 local FishingConfig = require(FishingSystem:WaitForChild("FishingConfig"))
 local RarityColors = FishingConfig.RarityColors
 
-local InventoryEvents = FishingSystem:WaitForChild("InventoryEvents")
-local rfGetData = InventoryEvents:WaitForChild("Inventory_GetData")
-local rfToggleFavorite = InventoryEvents:WaitForChild("Inventory_ToggleFavorite")
-local rfSellAll = InventoryEvents:WaitForChild("Inventory_SellAll")
-local reEquipRod = InventoryEvents:WaitForChild("Inventory_EquipRod")
-local reEquipFish = InventoryEvents:WaitForChild("Inventory_EquipFish")
-local reUnequipAll = InventoryEvents:WaitForChild("Inventory_UnequipAll")
-local reEquipTool = InventoryEvents:WaitForChild("Inventory_EquipTool")
-local reEquipVIPTool = InventoryEvents:WaitForChild("Inventory_EquipVIPTool")
-local rfGetVIPTools = InventoryEvents:WaitForChild("Inventory_GetVIPTools")
 local GlobalLuckVal = FishingSystem:WaitForChild("GlobalLuckMultiplier")
 
 local fishAssetFolder = FishingSystem:WaitForChild("Assets"):WaitForChild("Fish")
@@ -1060,10 +1051,10 @@ local function toggleEquipToolByName(toolName, fallbackTab)
 		end
 	end
 
-	if reEquipVIPTool then
-		reEquipVIPTool:FireServer(toolName)
-	elseif reEquipTool then
-		reEquipTool:FireServer(toolName)
+	if isVIP then
+		NetworkGateway:Request("PUT", "/inventory/equip-vip-tool", { ToolName = toolName })
+	else
+		NetworkGateway:Request("PUT", "/inventory/equip-tool", { ToolName = toolName })
 	end
 end
 
@@ -1077,7 +1068,7 @@ local function onAnyToolSelected(selectedToolName)
 		lastEquippedRodName = selectedToolName
 		saveHotbarState()
 		updateRodVisual(selectedToolName)
-		reEquipRod:FireServer(selectedToolName)
+		NetworkGateway:Request("PUT", "/inventory/equip-rod", { RodName = selectedToolName })
 		return
 	end
 
@@ -1183,8 +1174,9 @@ local function populateFishGrid()
 
 		favoriteButton.MouseButton1Click:Connect(function()
 			playClickSound()
-			local newStatus = rfToggleFavorite:InvokeServer(fishData.uniqueId)
-			if newStatus ~= nil then
+			local ok, res = NetworkGateway:Request("PUT", "/inventory/toggle-favorite", { FishUniqueId = fishData.uniqueId }):await()
+			if ok and type(res) == "table" and res.Success then
+				local newStatus = res.Data
 				fishData.isFavorited = newStatus
 				if newStatus then
 					favoriteButton.Text = "⭐"
@@ -1227,9 +1219,9 @@ local function populateFishGrid()
 				local char = player.Character
 				local currentTool = char and char:FindFirstChildOfClass("Tool")
 				if currentTool and currentTool:FindFirstChild("FishId") and currentTool.FishId.Value == targetFishId then
-					reUnequipAll:FireServer()
+					NetworkGateway:Request("DELETE", "/inventory/unequip-all", {})
 				else
-					reEquipFish:FireServer(targetFishId)
+					NetworkGateway:Request("PUT", "/inventory/equip-fish", { FishUniqueId = targetFishId })
 				end
 			end
 		end)
@@ -1315,7 +1307,7 @@ local function populateRodGrid()
 			lastEquippedRodName = rodName
 			saveHotbarState()
 			updateRodVisual(rodName)
-			reEquipRod:FireServer(rodName)
+			NetworkGateway:Request("PUT", "/inventory/equip-rod", { RodName = rodName })
 		end)
 
 		card.Parent = Inventory.RodContent
@@ -1447,9 +1439,9 @@ local function populateVIPToolGrid()
 	local vipTools = {}
 	local addedTools = {}
 
-	local success, vipToolsList = pcall(function()
-		return rfGetVIPTools:InvokeServer()
-	end)
+	local ok, res = NetworkGateway:Request("GET", "/inventory/vip-tools"):await()
+	local success = ok and type(res) == "table" and res.Success
+	local vipToolsList = (success and type(res.Data) == "table" and res.Data) or {}
 
 	if success and vipToolsList then
 		for _, toolData in ipairs(vipToolsList) do
@@ -1564,14 +1556,12 @@ local function refreshAllData()
 	if isRefreshing then return end
 	isRefreshing = true
 
-	local success, fullData = pcall(function()
-		return rfGetData:InvokeServer()
-	end)
-
-	if not success or not fullData then
+	local ok, res = NetworkGateway:Request("GET", "/inventory/data"):await()
+	if not ok or type(res) ~= "table" or not res.Success then
 		isRefreshing = false
 		return
 	end
+	local fullData = res.Data or { Fish = {}, Rods = {}, LastRod = nil }
 
 	allFishData = fullData.Fish or {}
 	allRodData = fullData.Rods or {}
@@ -1756,10 +1746,10 @@ local function handleKeyPress(input, gameProcessed)
 		local currentTool = char and char:FindFirstChildOfClass("Tool")
 
 		if currentTool and CollectionService:HasTag(currentTool, "Rod") then
-			reUnequipAll:FireServer()
+			NetworkGateway:Request("DELETE", "/inventory/unequip-all", {})
 		else
 			if lastEquippedRodName then
-				reEquipRod:FireServer(lastEquippedRodName)
+				NetworkGateway:Request("PUT", "/inventory/equip-rod", { RodName = lastEquippedRodName })
 			end
 		end
 
@@ -1785,9 +1775,9 @@ local function handleKeyPress(input, gameProcessed)
 			local currentTool = char and char:FindFirstChildOfClass("Tool")
 
 			if currentTool and currentTool:FindFirstChild("FishId") and currentTool.FishId.Value == lastEquippedFishId1 then
-				reUnequipAll:FireServer()
+				NetworkGateway:Request("DELETE", "/inventory/unequip-all", {})
 			else
-				reEquipFish:FireServer(lastEquippedFishId1)
+				NetworkGateway:Request("PUT", "/inventory/equip-fish", { FishUniqueId = lastEquippedFishId1 })
 			end
 		end
 
@@ -1799,9 +1789,9 @@ local function handleKeyPress(input, gameProcessed)
 			local currentTool = char and char:FindFirstChildOfClass("Tool")
 
 			if currentTool and currentTool:FindFirstChild("FishId") and currentTool.FishId.Value == lastEquippedFishId2 then
-				reUnequipAll:FireServer()
+				NetworkGateway:Request("DELETE", "/inventory/unequip-all", {})
 			else
-				reEquipFish:FireServer(lastEquippedFishId2)
+				NetworkGateway:Request("PUT", "/inventory/equip-fish", { FishUniqueId = lastEquippedFishId2 })
 			end
 		end
 	end
@@ -1836,7 +1826,7 @@ local function setupButtonEvents()
 
 			if isInventoryOpen then
 				if lastEquippedRodName then
-					reUnequipAll:FireServer()
+					NetworkGateway:Request("DELETE", "/inventory/unequip-all", {})
 					lastEquippedRodName = nil
 					updateRodVisual(nil)
 					saveHotbarState()
@@ -1848,7 +1838,7 @@ local function setupButtonEvents()
 			local currentTool = char and char:FindFirstChildOfClass("Tool")
 
 			if currentTool and CollectionService:HasTag(currentTool, "Rod") then
-				reUnequipAll:FireServer()
+				NetworkGateway:Request("DELETE", "/inventory/unequip-all", {})
 			else
 				if lastEquippedRodName then
 					local hasRod = false
@@ -1860,7 +1850,7 @@ local function setupButtonEvents()
 					end
 
 					if hasRod then
-						reEquipRod:FireServer(lastEquippedRodName)
+						NetworkGateway:Request("PUT", "/inventory/equip-rod", { RodName = lastEquippedRodName })
 					else
 						lastEquippedRodName = nil
 						updateRodVisual(nil)
@@ -1894,7 +1884,7 @@ local function setupButtonEvents()
 
 			if isInventoryOpen then
 				if lastEquippedFishId1 then
-					reUnequipAll:FireServer()
+					NetworkGateway:Request("DELETE", "/inventory/unequip-all", {})
 					lastEquippedFishId1 = nil
 					updateFishVisual1(nil)
 					saveHotbarState()
@@ -1906,10 +1896,10 @@ local function setupButtonEvents()
 			local currentTool = char and char:FindFirstChildOfClass("Tool")
 
 			if currentTool and currentTool:FindFirstChild("FishId") and currentTool.FishId.Value == lastEquippedFishId1 then
-				reUnequipAll:FireServer()
+				NetworkGateway:Request("DELETE", "/inventory/unequip-all", {})
 			else
 				if lastEquippedFishId1 then
-					reEquipFish:FireServer(lastEquippedFishId1)
+					NetworkGateway:Request("PUT", "/inventory/equip-fish", { FishUniqueId = lastEquippedFishId1 })
 				end
 			end
 		end))
@@ -1922,7 +1912,7 @@ local function setupButtonEvents()
 
 			if isInventoryOpen then
 				if lastEquippedFishId2 then
-					reUnequipAll:FireServer()
+					NetworkGateway:Request("DELETE", "/inventory/unequip-all", {})
 					lastEquippedFishId2 = nil
 					updateFishVisual2(nil)
 					saveHotbarState()
@@ -1934,10 +1924,10 @@ local function setupButtonEvents()
 			local currentTool = char and char:FindFirstChildOfClass("Tool")
 
 			if currentTool and currentTool:FindFirstChild("FishId") and currentTool.FishId.Value == lastEquippedFishId2 then
-				reUnequipAll:FireServer()
+				NetworkGateway:Request("DELETE", "/inventory/unequip-all", {})
 			else
 				if lastEquippedFishId2 then
-					reEquipFish:FireServer(lastEquippedFishId2)
+					NetworkGateway:Request("PUT", "/inventory/equip-fish", { FishUniqueId = lastEquippedFishId2 })
 				end
 			end
 		end))
@@ -2001,8 +1991,10 @@ local function setupButtonEvents()
 				return
 			end
 
-			local success, soldCount, earnedCoins = rfSellAll:InvokeServer()
-			if success then
+			local ok, res = NetworkGateway:Request("DELETE", "/inventory/sell-all", {}):await()
+			local sellSuccess = ok and type(res) == "table" and res.Success
+			local earnedCoins = (sellSuccess and tonumber(res.Data)) or 0
+			if sellSuccess then
 				lastEquippedFishId1 = nil
 				lastEquippedFishId2 = nil
 				updateFishVisual1(nil)
@@ -2014,11 +2006,7 @@ local function setupButtonEvents()
 				local fishingSys = ReplicatedStorage:FindFirstChild("FishingSystem")
 				local cn = fishingSys and fishingSys:FindFirstChild("ClientNotification")
 				if cn and cn:IsA("BindableEvent") then
-					if (soldCount or 0) > 0 then
-						cn:Fire(string.format("Successfully sold %d fish! +%d Coins", soldCount, earnedCoins or 0), 3.5, Color3.fromRGB(100, 255, 140))
-					else
-						cn:Fire("You have no fish to sell!", 3, Color3.fromRGB(255, 180, 50))
-					end
+					cn:Fire(res.Message or string.format("Successfully sold fish! +%d Coins", earnedCoins), 3.5, Color3.fromRGB(100, 255, 140))
 				end
 			end
 		end))
@@ -2067,11 +2055,9 @@ local function setupCharacter(character)
 	task.wait(0.5)
 
 	task.spawn(function()
-		local success, fullData = pcall(function()
-			return rfGetData:InvokeServer()
-		end)
-
-		if success and fullData then
+		local ok, res = NetworkGateway:Request("GET", "/inventory/data"):await()
+		if ok and type(res) == "table" and res.Success then
+			local fullData = res.Data or { Fish = {}, Rods = {}, LastRod = nil }
 			allFishData = fullData.Fish or {}
 			allRodData = fullData.Rods or {}
 

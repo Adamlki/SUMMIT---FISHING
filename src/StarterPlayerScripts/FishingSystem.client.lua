@@ -6,13 +6,16 @@
 local Players = game:GetService("Players")
 local UIS = game:GetService("UserInputService")
 local RunService = game:GetService("RunService")
-local RepStorage = game:GetService("ReplicatedStorage"):WaitForChild("FishingSystem")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RepStorage = ReplicatedStorage:WaitForChild("FishingSystem")
 local CS = game:GetService("CollectionService")
 local Debris = game:GetService("Debris")
 local StarterGui = game:GetService("StarterGui")
 
 -- 🎣 PENAMBAHAN UNTUK ANIMASI IKAN & CAMERA SHAKE
 local TweenService = game:GetService("TweenService")
+
+local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 
 local player = Players.LocalPlayer
 local isMobile = UIS.TouchEnabled and not UIS.KeyboardEnabled
@@ -29,7 +32,6 @@ local CastingSystem = require(modulesFolder:WaitForChild("CastingSystem"))
 local RodVFXManager = require(modulesFolder:WaitForChild("RodVFXManager"))
 
 -- ===== REMOTE EVENTS =====
-local fishGiverEvent = RepStorage:WaitForChild("FishGiver")
 local castReplicationEvent = RepStorage:WaitForChild("CastReplication")
 local cleanupCastEvent = RepStorage:WaitForChild("CleanupCast")
 local showNotificationEvent = RepStorage:FindFirstChild("ShowNotification")
@@ -43,36 +45,27 @@ local gameState = {
 	waitTime = math.random(3, 6), fishingCaught = false, hasLanded = false,
 	fishingInProgress = false, canCast = true, castingCooldown = false,
 	cooldownTime = 0.3, activeFishingTask = nil,
-	isAutoFishing = false, pendingServerRoll = nil, lastRollId = nil
+	isAutoFishing = false, lastRollId = nil
 }
-local playerPityData = FishingConfig.CreatePityTracker()
-
-local fishRollToken = 0
 
 local function requestServerFish(powerPercent)
-	fishRollToken += 1
-	local token = fishRollToken
-	local deadline = os.clock() + 1.5
-	fishGiverEvent:FireServer({
-		type = "rollRequest",
-		token = token,
-		power = powerPercent,
-	})
-	while os.clock() < deadline do
-		local result = gameState.pendingServerRoll
-		if result and result.token == token then
-			gameState.pendingServerRoll = nil
-			return result
-		end
-		task.wait(0.05)
+	-- Promise:await() returns (success, value); Gateway still resolves failures as response tables.
+	local callOk, awaitedOk, response = pcall(function()
+		return NetworkGateway:Request("POST", "/fishing/roll", { Power = powerPercent }):await()
+	end)
+
+	if not callOk or not awaitedOk or type(response) ~= "table" then
+		GUIManager:ShowNotification("Gagal menghubungi server untuk roll ikan.", 3, Color3.fromRGB(255, 100, 100))
+		return nil
 	end
+
+	if response.Success and type(response.Data) == "table" then
+		return response.Data
+	end
+
+	GUIManager:ShowNotification(response.Message or "Roll ikan ditolak server.", 3, Color3.fromRGB(255, 100, 100))
 	return nil
 end
-
-fishGiverEvent.OnClientEvent:Connect(function(message)
-	if type(message) ~= "table" or message.type ~= "rollResult" then return end
-	gameState.pendingServerRoll = message
-end)
 
 
 local speedState = {
@@ -262,7 +255,6 @@ local function selectFish()
 		return nil
 	end
 
-	local config = FishingConfig.GetRodConfig(rodName)
 	local powerPercent = PowerBarSystem:GetCurrentPower() / 100
 
 	if gameState.isAutoFishing then
@@ -270,32 +262,13 @@ local function selectFish()
 	end
 
 	local serverResult = requestServerFish(powerPercent)
-	if serverResult then
-		gameState.lastRollId = serverResult.rollId
-		return {name = serverResult.name, rarity = serverResult.rarity}, serverResult.weight
+	if not serverResult then
+		gameState.lastRollId = nil
+		return nil
 	end
 
-	gameState.lastRollId = nil
-	local totalLuck = FishingConfig.CalculateTotalLuck(config.baseLuck, powerPercent)
-	local selectedFish = FishingConfig.RollFish(playerPityData, rodName, totalLuck)
-
-	if not selectedFish then
-		warn("⚠ RollFish returned nil! Using fallback Common fish")
-		for _, fish in ipairs(FishingConfig.FishTable) do
-			if fish.rarity == "Common" then
-				selectedFish = fish
-				break
-			end
-		end
-
-		if not selectedFish then
-			return nil
-		end
-	end
-
-	local fishWeight = FishingConfig.GenerateFishWeight(selectedFish, totalLuck, config.maxWeight)
-
-	return selectedFish, fishWeight
+	gameState.lastRollId = serverResult.RollId
+	return { name = serverResult.Name, rarity = serverResult.Rarity }, serverResult.Weight
 end
 
 -- ===== AUTO-FISHING LOOP =====
@@ -1050,10 +1023,8 @@ MinigameSystem:SetCallbacks(
 				-- 🆕 AKHIR LOGIKA PENGUNCIAN MEMANCING
 
 				-- Send fish to server
-				fishGiverEvent:FireServer({
-					type = "claim",
-					rollId = gameState.lastRollId,
-					hookPosition = gameState.savedHookPosition
+				NetworkGateway:Request("POST", "/fishing/claim", {
+					RollId = gameState.lastRollId
 				})
 				gameState.lastRollId = nil
 

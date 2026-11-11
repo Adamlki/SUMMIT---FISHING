@@ -1,19 +1,9 @@
 local RoleConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("RoleConfig"))
 --!strict
--- ShopFeatureController: Master Store Controller
--- Sourced directly from ShopMasterConfig for Zero-Maintenance Code-Based Updates.
--- Features:
--- 1. 3D ViewportFrames for all Rods (Real 3D models with camera & lighting, like Fish Index)
--- 2. Rods Ownership: Once purchased, status becomes permanent 'OWNED' (rods managed via backpack)
--- 3. VIP Rod: Free/Owned with VIP Pack, or 'VIP ONLY' button linking to VIP Gamepass
--- 4. Trails: Dual toggle 'EQUIP' / 'EQUIPPED' with real WalkSpeed stacking & torso welding
--- 5. Smooth Animated ButtonHeader Selection (BackgroundTransparency 0 vs 1 via TweenService)
--- 6. Universal Tactile Button Animations (Hover Scale 1.04 + Click Squash/Bounce with Sound)
--- 7. Exclusive Server Luck Stacking & Auto-Reset
--- 8. Player Gifting Modal
-
+-- ShopFeatureController: Master Store Controller (REST NetworkGateway Integrated)
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 local TweenService = game:GetService("TweenService")
 local SoundService = game:GetService("SoundService")
 local MarketplaceService = game:GetService("MarketplaceService")
@@ -29,22 +19,13 @@ local rodAssets = FishingSystem:WaitForChild("Assets"):WaitForChild("Rod")
 local MasterConfig = require(FishingSystem:WaitForChild("ShopMasterConfig"))
 local TrailShopConfig = require(TrailSystem:WaitForChild("TrailShopConfig"))
 
--- Remotes
+-- Legacy remotes kept for dual-stack compatibility
 local RodShopEvents = FishingSystem:WaitForChild("RodShopEvents")
-local rfGetShopData = RodShopEvents:WaitForChild("GetShopData") :: RemoteFunction
-local reRequestPurchase = RodShopEvents:WaitForChild("RequestPurchase") :: RemoteEvent
 local rePurchaseSuccess = RodShopEvents:WaitForChild("PurchaseSuccess") :: RemoteEvent
-local rfEquipRod = RodShopEvents:WaitForChild("EquipRod") :: RemoteFunction
-local rfBuyServerLuck = RodShopEvents:WaitForChild("BuyServerLuck") :: RemoteFunction
-local rfBuyCoinPack = RodShopEvents:WaitForChild("BuyCoinPack") :: RemoteFunction
 local rfRequestGift = RodShopEvents:WaitForChild("RequestGift") :: RemoteFunction
 
 local TrailRemotes = TrailSystem:WaitForChild("Remotes")
-local GetTrailDataRF = TrailRemotes:WaitForChild("GetTrailData") :: RemoteFunction
-local BuyTrailWithCoinsRF = TrailRemotes:WaitForChild("BuyTrailWithCoins") :: RemoteFunction
 local BuyTrailWithRobuxRF = TrailRemotes:WaitForChild("BuyTrailWithRobux") :: RemoteFunction
-local EquipTrailRF = TrailRemotes:WaitForChild("EquipTrail") :: RemoteFunction
-local UnequipTrailRF = TrailRemotes:WaitForChild("UnequipTrail") :: RemoteFunction
 local TrailUpdatedRE = TrailRemotes:WaitForChild("TrailUpdated") :: RemoteEvent
 
 -- Values for Live Server Luck
@@ -491,7 +472,11 @@ local function openPlayerModal(category: string, itemId: string, itemTitle: stri
 			if giftBtn then
 				giftBtn.MouseButton1Click:Connect(function()
 					modal.Visible = false
-					rfRequestGift:InvokeServer(currentGiftCategory, currentGiftId, p.UserId)
+					NetworkGateway:Request("POST", "/shop/gift", {
+						ItemCategory = currentGiftCategory,
+						ItemId = currentGiftId,
+						TargetUserId = p.UserId
+					})
 				end)
 			end
 		end
@@ -520,7 +505,7 @@ local function hookExclusiveButtons()
 	if slBuy then
 		slBuy.MouseButton1Click:Connect(function()
 			if ServerLuckPurchases.Value >= 5 then return end
-			rfBuyServerLuck:InvokeServer()
+			NetworkGateway:Request("POST", "/shop/buy-server-luck", {})
 		end)
 	end
 
@@ -573,7 +558,7 @@ local function hookExclusiveButtons()
 				local gb = f:FindFirstChild("GiftButton") :: ImageButton?
 				if bb then
 					bb.MouseButton1Click:Connect(function()
-						rfBuyCoinPack:InvokeServer(key)
+						NetworkGateway:Request("POST", "/shop/buy-coin-pack", { PackName = key })
 					end)
 				end
 				if gb then
@@ -736,7 +721,11 @@ local function renderRodsCatalogImmediate()
 						return
 					end
 
-					reRequestPurchase:FireServer(rod.Name)
+					NetworkGateway:Request("POST", "/shop/buy-rod", { RodName = rod.Name }):andThen(function(res)
+						if res.Success then
+							refreshData()
+						end
+					end)
 				end)
 			end
 
@@ -751,7 +740,7 @@ local function renderRodsCatalogImmediate()
 					elseif rod.ProductId and rod.ProductId > 0 then
 						MarketplaceService:PromptProductPurchase(localPlayer, rod.ProductId)
 					else
-						reRequestPurchase:FireServer(rod.Name)
+						NetworkGateway:Request("POST", "/shop/buy-rod", { RodName = rod.Name })
 					end
 				end)
 			end
@@ -821,20 +810,25 @@ local function renderTrailsCatalog()
 
 					if currentOwned then
 						if currentEquipped then
-							UnequipTrailRF:InvokeServer()
+							NetworkGateway:Request("DELETE", "/trail/unequip", {})
 							equippedTrail = ""
 							renderTrailsCatalog()
 						else
-							EquipTrailRF:InvokeServer(trail.Id)
+							NetworkGateway:Request("PUT", "/trail/equip", { TrailId = trail.Id })
 							equippedTrail = trail.Id
 							playSound(SOUNDS.Equip, 0.4)
 							renderTrailsCatalog()
 						end
 					else
-						local res = BuyTrailWithCoinsRF:InvokeServer(trail.Id)
-						if res and res.success then
-							table.insert(ownedTrails, trail.Id)
-							equippedTrail = trail.Id
+						local ok, res = NetworkGateway:Request("POST", "/trail/buy-coins", { TrailId = trail.Id }):await()
+						if ok and type(res) == "table" and res.Success then
+							local data = res.Data
+							if data and type(data.Owned) == "table" then
+								ownedTrails = data.Owned
+							elseif not table.find(ownedTrails, trail.Id) then
+								table.insert(ownedTrails, trail.Id)
+							end
+							equippedTrail = (data and data.Equipped) or trail.Id
 							playSound(SOUNDS.Purchase, 0.45)
 							renderTrailsCatalog()
 						end
@@ -849,7 +843,9 @@ local function renderTrailsCatalog()
 					if currentOwned then return end
 					local res = BuyTrailWithRobuxRF:InvokeServer(trail.Id)
 					if res and res.success then
-						table.insert(ownedTrails, trail.Id)
+						if not table.find(ownedTrails, trail.Id) then
+							table.insert(ownedTrails, trail.Id)
+						end
 						equippedTrail = trail.Id
 						playSound(SOUNDS.Purchase, 0.45)
 						renderTrailsCatalog()
@@ -863,9 +859,19 @@ end
 -- ===================================================================
 -- DATA SYNC ENGINE
 -- ===================================================================
+local function refreshTrailData()
+	local ok, res = NetworkGateway:Request("GET", "/trail/data"):await()
+	if not ok or type(res) ~= "table" or not res.Success then return end
+	local trailData = res.Data or {}
+	ownedTrails = trailData.Owned or trailData.owned or {}
+	equippedTrail = trailData.Equipped or trailData.equipped or ""
+	renderTrailsCatalog()
+end
+
 local function refreshData()
 	task.spawn(function()
-		local shopData = rfGetShopData:InvokeServer()
+		local okShop, resShop = NetworkGateway:Request("GET", "/shop/rods"):await()
+		local shopData = (okShop and type(resShop) == "table" and resShop.Success and resShop.Data) or nil
 		if shopData then
 			ownedRods = shopData.OwnedRods or {}
 			equippedRod = shopData.EquippedRod or "Basic Rod"
@@ -873,16 +879,18 @@ local function refreshData()
 			renderRodsCatalogImmediate()
 		end
 
-		local trailData = GetTrailDataRF:InvokeServer()
-		if trailData then
-			ownedTrails = trailData.owned or {}
-			equippedTrail = trailData.equipped or ""
-			renderTrailsCatalog()
-		end
-
+		refreshTrailData()
 		applyExclusiveMasterConfig()
 	end)
 end
+
+NetworkGateway:On("Trail/Updated", function(data)
+	if type(data) == "table" and type(data.TrailId) == "string" then
+		equippedTrail = data.TrailId
+		renderTrailsCatalog()
+	end
+	task.spawn(refreshTrailData)
+end)
 
 rePurchaseSuccess.OnClientEvent:Connect(function()
 	playSound(SOUNDS.Purchase, 0.45)

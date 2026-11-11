@@ -1,7 +1,9 @@
 -- System by @thehandofvoid
 -- Modified by @jay_peaceee
 -- ServerScriptService/FishingServer (Fixed - Tags ALL Rods Including Basic Rod)
-local ReplicatedStorage = game:GetService("ReplicatedStorage"):WaitForChild("FishingSystem")
+local ReplicatedStorageService = game:GetService("ReplicatedStorage")
+local ReplicatedStorage = ReplicatedStorageService:WaitForChild("FishingSystem")
+local NetworkGateway = require(ReplicatedStorageService:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local PhysicsService = game:GetService("PhysicsService")
@@ -45,6 +47,14 @@ local rollIdCounter = 0
 local GRANT_MIN_INTERVAL = 2.5
 local MIN_MINIGAME_DURATION = 0.4 -- Anti-bot: Minimum time required to reel minigame
 local PENDING_ROLL_TIMEOUT = 120
+
+local function successResponse(data)
+	return { Success = true, StatusCode = 200, Data = data }
+end
+
+local function failureResponse(statusCode, errorCode, message)
+	return { Success = false, StatusCode = statusCode, ErrorCode = errorCode, Message = message }
+end
 
 
 local fishDefs = {}
@@ -422,9 +432,152 @@ local function grantCaughtFish(player, roll)
 	publishRareCatch(player, roll.name, roll.weight, roll.rarity)
 end
 
+local function handleRollRequest(player, power, legacyToken, isLegacy)
+	if not player or not player:IsDescendantOf(Players) then
+		return failureResponse(400, "INVALID_PLAYER", "Player is not available.")
+	end
+
+	local now = os.clock()
+	if lastFishTime[player] and now - lastFishTime[player] < FISH_COOLDOWN then
+		return failureResponse(429, "RATE_LIMITED", "Please wait before rolling again.")
+	end
+	lastFishTime[player] = now
+
+	local session = fishingSessions[player]
+	local closedOk = session and session.state == "CastedClosed" and (now - (session.closedAt or 0)) <= 2.0
+	if not session or (session.state ~= "Casted" and not closedOk) then
+		warn("[FishingServer] Security: roll rejected - no active cast session for " .. player.Name)
+		return failureResponse(400, "NO_ACTIVE_CAST", "No active cast session found.")
+	end
+
+	if (now - session.castTime) < 0.1 then
+		return failureResponse(429, "ROLL_TOO_EARLY", "Roll requested too early.")
+	end
+
+	session.state = "Rolling"
+
+	local powerToUse = session.power or sanitizePower(power)
+	local roll = rollFishForPlayer(player, powerToUse)
+	if not roll then
+		if fishingSessions[player] == session then
+			fishingSessions[player] = nil
+			pendingRolls[player] = nil
+		end
+		return failureResponse(500, "ROLL_FAILED", "Failed to roll a fish.")
+	end
+
+	rollIdCounter = rollIdCounter + 1
+	roll.rollId = rollIdCounter
+	roll.time = now
+
+	session.roll = roll
+	session.rollTime = now
+	session.state = "Reeling"
+	pendingRolls[player] = roll
+
+	if isLegacy then
+		fishGiverEvent:FireClient(player, {
+			type = "rollResult",
+			token = legacyToken,
+			rollId = roll.rollId,
+			name = roll.name,
+			rarity = roll.rarity,
+			weight = roll.weight
+		})
+	end
+
+	return successResponse({
+		RollId = roll.rollId,
+		Name = roll.name,
+		Rarity = roll.rarity,
+		Weight = roll.weight,
+	})
+end
+
+local function handleClaimRequest(player, rollId, allowMissingRollId)
+	if not player or not player:IsDescendantOf(Players) then
+		return failureResponse(400, "INVALID_PLAYER", "Player is not available.")
+	end
+
+	local now = os.clock()
+	local session = fishingSessions[player]
+	if not session or session.state ~= "Reeling" or not session.roll then
+		warn("[FishingServer] Security: claim rejected - no reeling session for " .. player.Name)
+		return failureResponse(400, "NO_REELING_SESSION", "No active reeling session found.")
+	end
+
+	if rollId == nil and allowMissingRollId then
+		rollId = session.roll.rollId
+	end
+
+	if type(rollId) ~= "number" or rollId ~= math.floor(rollId) then
+		warn("[FishingServer] Security: claim rejected - invalid rollId for " .. player.Name)
+		return failureResponse(400, "INVALID_ROLL_ID", "RollId must be an integer.")
+	end
+
+	if rollId ~= session.roll.rollId then
+		warn("[FishingServer] Security: claim rejected - rollId mismatch for " .. player.Name)
+		return failureResponse(400, "ROLL_ID_MISMATCH", "RollId does not match the active fishing session.")
+	end
+
+	local reelDuration = now - (session.rollTime or session.castTime)
+	local totalElapsed = now - session.castTime
+	if totalElapsed < 2.5 then
+		warn("[FishingServer] Security: claim rejected - terlalu cepat sejak cast (bot pattern) for " .. player.Name .. " (" .. string.format("%.2fs", totalElapsed) .. ")")
+		return failureResponse(400, "CLAIM_TOO_EARLY", "Fish cannot be claimed before 2.5 seconds.")
+	end
+
+	if reelDuration >= PENDING_ROLL_TIMEOUT then
+		if fishingSessions[player] == session then
+			fishingSessions[player] = nil
+			pendingRolls[player] = nil
+		end
+		return failureResponse(400, "SESSION_EXPIRED", "The fishing session has expired.")
+	end
+
+	if lastGrantTime[player] and now - lastGrantTime[player] < GRANT_MIN_INTERVAL then
+		return failureResponse(429, "GRANT_COOLDOWN", "Please wait before claiming another fish.")
+	end
+
+	local roll = session.roll
+	session.state = "Claimed"
+	lastGrantTime[player] = now
+
+	local grantOk, grantErr = pcall(grantCaughtFish, player, roll)
+	if not grantOk then
+		warn("[FishingServer] grantCaughtFish failed:", grantErr)
+	end
+
+	-- Only clear our own session; a new cast may have replaced it while the grant was yielding.
+	if fishingSessions[player] == session then
+		fishingSessions[player] = nil
+		pendingRolls[player] = nil
+	end
+
+	return successResponse({
+		Name = roll.name,
+		Weight = roll.weight,
+	})
+end
+
 local function fireAllClientsExcept(event, excludePlayer, ...)
 	for _, p in Players:GetPlayers() do if p ~= excludePlayer then event:FireClient(p, ...) end end
 end
+
+NetworkGateway:RegisterRoute("POST", "/fishing/roll", function(player, payload)
+	if type(payload) ~= "table" then
+		return failureResponse(400, "INVALID_PAYLOAD", "Payload must be a table.")
+	end
+	return handleRollRequest(player, payload.Power, nil, false)
+end, { rateLimitSeconds = FISH_COOLDOWN })
+
+-- No gateway cooldown here: an early claim must reach the totalElapsed check and be retryable.
+NetworkGateway:RegisterRoute("POST", "/fishing/claim", function(player, payload)
+	if type(payload) ~= "table" then
+		return failureResponse(400, "INVALID_PAYLOAD", "Payload must be a table.")
+	end
+	return handleClaimRequest(player, payload.RollId, false)
+end)
 
 -- H-04 & M-01: Server-authoritative cast handler with state registration & pcall
 castReplicationEvent.OnServerEvent:Connect(function(player, rodPos, vel, rodName, power)
@@ -481,102 +634,19 @@ cleanupCastEvent.OnServerEvent:Connect(function(player)
 	end
 end)
 
--- H-04 & M-01: Server-authoritative roll & claim state machine with anti-bot verification
+-- Dual-stack legacy adapter. New clients use NetworkGateway; old clients keep
+-- sending { type = "rollRequest" } and { type = "claim" } through FishGiver.
 fishGiverEvent.OnServerEvent:Connect(function(player, payload)
 	local ok, err = pcall(function()
 		if typeof(payload) ~= "table" then return end
-		if not player or not player:IsDescendantOf(Players) then return end
-
-		local now = os.clock()
-		local session = fishingSessions[player]
 
 		if payload.type == "rollRequest" then
-			if lastFishTime[player] and now - lastFishTime[player] < FISH_COOLDOWN then return end
-			lastFishTime[player] = now
-
-			-- Verify active cast session exists before allowing roll (H-04 rev2: terima sesi yang baru ditutup cleanup)
-			local closedOk = session and session.state == "CastedClosed" and (now - (session.closedAt or 0)) <= 2.0
-			if not session or (session.state ~= "Casted" and not closedOk) then
-				warn("[FishingServer] Security: rollRequest rejected - no active cast session for " .. player.Name)
-				return
-			end
-
-			-- Enforce minimum delay between cast and roll
-			if (now - session.castTime) < 0.1 then return end
-
-			session.state = "Rolling"
-
-			local powerToUse = session.power or sanitizePower(payload.power)
-			local roll = rollFishForPlayer(player, powerToUse)
-			if not roll then
-				fishingSessions[player] = nil
-				return
-			end
-
-			rollIdCounter = rollIdCounter + 1
-			roll.rollId = rollIdCounter
-			roll.time = now
-
-			session.roll = roll
-			session.rollTime = now
-			session.state = "Reeling"
-			pendingRolls[player] = roll -- backward compatibility
-
-			fishGiverEvent:FireClient(player, {
-				type = "rollResult",
-				token = payload.token,
-				rollId = roll.rollId,
-				name = roll.name,
-				rarity = roll.rarity,
-				weight = roll.weight
-			})
+			handleRollRequest(player, payload.power, payload.token, true)
 			return
 		end
 
 		if payload.type == "claim" then
-			-- Verify active session in Reeling state
-			if not session or session.state ~= "Reeling" or not session.roll then
-				warn("[FishingServer] Security: claim rejected - no reeling session for " .. player.Name)
-				return
-			end
-
-			-- Verify rollId match
-			if payload.rollId ~= nil and payload.rollId ~= session.roll.rollId then
-				warn("[FishingServer] Security: claim rejected - rollId mismatch for " .. player.Name)
-				return
-			end
-
-			-- Anti-bot (H-04 rev2): ukur total waktu sejak cast. Klien memutar minigame SEBELUM roll,
-			-- jadi rentang roll->claim hanyalah fase reveal dan tidak valid dijadikan patokan durasi minigame.
-			local reelDuration = now - (session.rollTime or session.castTime)
-			local totalElapsed = now - session.castTime
-			if totalElapsed < 2.5 then
-				warn("[FishingServer] Security: claim rejected - terlalu cepat sejak cast (bot pattern) for " .. player.Name .. " (" .. string.format("%.2fs", totalElapsed) .. ")")
-				return
-			end
-
-			-- Session timeout check
-			if reelDuration >= PENDING_ROLL_TIMEOUT then
-				fishingSessions[player] = nil
-				pendingRolls[player] = nil
-				return
-			end
-
-			-- Rate limit interval check
-			if lastGrantTime[player] and now - lastGrantTime[player] < GRANT_MIN_INTERVAL then
-				return
-			end
-
-			local roll = session.roll
-			session.state = "Claimed"
-			lastGrantTime[player] = now
-
-			grantCaughtFish(player, roll)
-
-			-- Clean up session after claim
-			fishingSessions[player] = nil
-			pendingRolls[player] = nil
-			return
+			handleClaimRequest(player, payload.rollId, true)
 		end
 	end)
 	if not ok then

@@ -136,7 +136,7 @@ local function normalizeEventName(eventName: any): string?
 	if #eventName == 0 or #eventName > 64 then
 		return nil
 	end
-	if not string.match(eventName, "^[%w%-_%.]+$") then
+	if not string.match(eventName, "^[%w%-_%./]+$") then
 		return nil
 	end
 	if string.find(eventName, "..", 1, true) then

@@ -4,6 +4,7 @@
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local ServerScriptService = game:GetService("ServerScriptService")
+local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 
 local fishingFolder = ReplicatedStorage:WaitForChild("FishingSystem")
 local syncSessionRemote = fishingFolder:WaitForChild("SyncSessionState")
@@ -21,6 +22,7 @@ function AntiAFKService.new()
 	local self = setmetatable({}, AntiAFKService)
 	self._activePlayerState = {}
 	self._isInitialSpawn = {}
+	self._lastSyncTime = {}
 	self._running = false
 	return self
 end
@@ -124,41 +126,44 @@ function AntiAFKService:HandlePlayerRemoving(player)
 	self:SaveSnapshot(player)
 	self._activePlayerState[player.UserId] = nil
 	self._isInitialSpawn[player.UserId] = nil
+	self._lastSyncTime[player.UserId] = nil
+end
+
+function AntiAFKService:SyncSessionData(player, data)
+	if typeof(data) ~= "table" then return end
+	local now = os.clock()
+	local awayOnly = data.Away ~= nil and data.Action == nil
+	local minInterval = awayOnly and 0.5 or 2.0
+	if self._lastSyncTime[player.UserId] and now - self._lastSyncTime[player.UserId] < minInterval then
+		return
+	end
+	self._lastSyncTime[player.UserId] = now
+
+	local existing = self._activePlayerState[player.UserId] or {}
+	local prevAway = existing.Away
+	existing.Action = data.Action or existing.Action or "Idle"
+	if data.RodName ~= nil then existing.RodName = data.RodName end
+	if data.IsAutoFishing ~= nil then existing.IsAutoFishing = (data.IsAutoFishing == true) end
+	if data.Away ~= nil then existing.Away = (data.Away == true) end
+	self._activePlayerState[player.UserId] = existing
+
+	-- Snapshot ditulis saat status Away BERUBAH (profile masih aktif di sini).
+	-- Jalur PlayerRemoving tidak bisa diandalkan: FishData:Release() berjalan
+	-- lebih dulu sehingga profile sudah tidak aktif saat snapshot disimpan.
+	if data.Away ~= nil and existing.Away ~= prevAway then
+		self:SaveSnapshot(player)
+	end
+
+	-- In-memory state only during gameplay.
+	-- Snapshot is written to FishData on PlayerRemoving or server shutdown to eliminate 7s DataStore churn.
 end
 
 function AntiAFKService:Start()
 	if self._running then return end
 	self._running = true
 
-	local lastSyncTime = {}
-
 	syncSessionRemote.OnServerEvent:Connect(function(player, data)
-		if typeof(data) ~= "table" then return end
-		local now = os.clock()
-		local awayOnly = data.Away ~= nil and data.Action == nil
-		local minInterval = awayOnly and 0.5 or 2.0
-		if lastSyncTime[player.UserId] and now - lastSyncTime[player.UserId] < minInterval then
-			return
-		end
-		lastSyncTime[player.UserId] = now
-
-		local existing = self._activePlayerState[player.UserId] or {}
-		local prevAway = existing.Away
-		existing.Action = data.Action or existing.Action or "Idle"
-		if data.RodName ~= nil then existing.RodName = data.RodName end
-		if data.IsAutoFishing ~= nil then existing.IsAutoFishing = (data.IsAutoFishing == true) end
-		if data.Away ~= nil then existing.Away = (data.Away == true) end
-		self._activePlayerState[player.UserId] = existing
-
-		-- Snapshot ditulis saat status Away BERUBAH (profile masih aktif di sini).
-		-- Jalur PlayerRemoving tidak bisa diandalkan: FishData:Release() berjalan
-		-- lebih dulu sehingga profile sudah tidak aktif saat snapshot disimpan.
-		if data.Away ~= nil and existing.Away ~= prevAway then
-			self:SaveSnapshot(player)
-		end
-
-		-- In-memory state only during gameplay.
-		-- Snapshot is written to FishData on PlayerRemoving or server shutdown to eliminate 7s DataStore churn.
+		self:SyncSessionData(player, data)
 	end)
 
 	Players.PlayerAdded:Connect(function(player)
@@ -169,7 +174,6 @@ function AntiAFKService:Start()
 	end
 
 	Players.PlayerRemoving:Connect(function(player)
-		lastSyncTime[player.UserId] = nil
 		self:HandlePlayerRemoving(player)
 	end)
 
@@ -182,5 +186,29 @@ end
 
 local service = AntiAFKService.new()
 service:Start()
+
+-- ===================================================================
+-- REST ROUTE (NETWORK GATEWAY)
+-- ===================================================================
+
+NetworkGateway:RegisterRoute("PUT", "/afk/sync", function(player, payload)
+	if type(payload) ~= "table" or type(payload.Away) ~= "boolean" then
+		return {
+			Success = false,
+			StatusCode = 400,
+			ErrorCode = "INVALID_PAYLOAD",
+			Message = "Away must be a boolean.",
+		}
+	end
+
+	service:SyncSessionData(player, { Away = payload.Away })
+
+	return {
+		Success = true,
+		StatusCode = 200,
+		Data = { Away = payload.Away },
+		Message = "AFK state synced.",
+	}
+end, { rateLimitSeconds = 0.5 })
 
 return AntiAFKService
