@@ -1,0 +1,17 @@
+# Roblox place/model build artifacts
+*.rbxl
+*.rbxlx
+*.rbxm
+*.rbxmx
+*.rbxl.lock
+*.rbxlx.lock
+*.rbxm.lock
+*.rbxmx.lock
+sourcemap.json
+
+# Local tooling and logs
+.aftman/
+.rojo/
+*.log
+.DS_Store
+Thumbs.db
