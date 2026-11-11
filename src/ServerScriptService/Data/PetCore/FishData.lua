@@ -88,6 +88,7 @@ local PlayerProfileTemplate = {
 	OwnedGamepasses = {},
 	SavedFish = {},
 	TotalFishCaught = 0,
+	FishIndex = {},
 	OwnedRods = {"Basic Rod"},
 	LastEquippedRod = "Basic Rod",
 	LastPosition = nil,
@@ -315,6 +316,42 @@ function GameProfileService:ToggleFavoriteFish(player, fishUniqueId)
 	end
 
 	return nil
+end
+
+function GameProfileService:GetFishIndex(player)
+	local profile = self:GetProfile(player)
+	if not profile then return {} end
+	if type(profile.Data.FishIndex) ~= "table" then
+		profile.Data.FishIndex = {}
+	end
+	return profile.Data.FishIndex
+end
+
+function GameProfileService:GetTotalFishCaught(player)
+	local profile = self:GetProfile(player)
+	if not profile then return 0 end
+	return profile.Data.TotalFishCaught or 0
+end
+
+function GameProfileService:RecordFishCatch(player, fishName)
+	local profile = self:GetProfile(player)
+	if not profile or not profile:IsActive() then return 0, 0 end
+
+	profile.Data.TotalFishCaught = (profile.Data.TotalFishCaught or 0) + 1
+	if type(profile.Data.FishIndex) ~= "table" then
+		profile.Data.FishIndex = {}
+	end
+	profile.Data.FishIndex[fishName] = (profile.Data.FishIndex[fishName] or 0) + 1
+
+	local leaderstats = player:FindFirstChild("leaderstats")
+	if leaderstats then
+		local catch = leaderstats:FindFirstChild("Tangkapan")
+		if catch then
+			catch.Value = profile.Data.TotalFishCaught
+		end
+	end
+
+	return profile.Data.TotalFishCaught, profile.Data.FishIndex[fishName]
 end
 
 -- ===================================================================
@@ -561,6 +598,34 @@ local function onPlayerAdded(player)
 			local existingCoins = leaderstats:FindFirstChild("Coins")
 			existingCoins.Value = profile.Data.Coins or 0
 			player:SetAttribute("Coins", existingCoins.Value)
+		end
+
+		-- Tangkapan (Total Fish Caught)
+		local tangkapan = leaderstats:FindFirstChild("Tangkapan")
+		if not tangkapan then
+			tangkapan = Instance.new("IntValue")
+			tangkapan.Name = "Tangkapan"
+			tangkapan.Value = profile.Data.TotalFishCaught or 0
+			tangkapan.Parent = leaderstats
+		else
+			tangkapan.Value = profile.Data.TotalFishCaught or 0
+		end
+
+		-- Migration: if TotalFishCaught is 0, check legacy FishingCatchDataStore once
+		if (profile.Data.TotalFishCaught or 0) == 0 then
+			task.spawn(function()
+				local DataStoreService = game:GetService("DataStoreService")
+				pcall(function()
+					local legacyStore = DataStoreService:GetDataStore(DataStoreConfig.Stores.FishingCatch)
+					local val = legacyStore:GetAsync("Catch_" .. player.UserId)
+					if val and type(val) == "number" and val > 0 then
+						profile.Data.TotalFishCaught = val
+						if leaderstats:FindFirstChild("Tangkapan") then
+							leaderstats.Tangkapan.Value = val
+						end
+					end
+				end)
+			end)
 		end
 	end)
 

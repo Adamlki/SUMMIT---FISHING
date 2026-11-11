@@ -40,6 +40,7 @@ end
 -- ========================================
 
 local CarryRemote = ReplicatedStorage:WaitForChild("CarryRemote")
+local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 
 -- ========================================
 -- CONFIGURATION
@@ -462,9 +463,9 @@ end
 btnYes.MouseButton1Click:Connect(function()
 	if lastRequesterId then
 		frame3.Visible = false
-		CarryRemote:FireServer("Response", {
-			requesterId = lastRequesterId, 
-			accept = true
+		NetworkGateway:Request("POST", "/carry/response", {
+			RequesterId = lastRequesterId, 
+			Accept = true
 		})
 	end
 end)
@@ -473,9 +474,9 @@ end)
 btnNo.MouseButton1Click:Connect(function()
 	if lastRequesterId then
 		frame3.Visible = false
-		CarryRemote:FireServer("Response", {
-			requesterId = lastRequesterId, 
-			accept = false
+		NetworkGateway:Request("POST", "/carry/response", {
+			RequesterId = lastRequesterId, 
+			Accept = false
 		})
 	end
 end)
@@ -484,13 +485,13 @@ end)
 btnDown.MouseButton1Click:Connect(function() 
 	if isCarried then
 		-- Get down dari carrier
-		CarryRemote:FireServer("Stop", {})
+		NetworkGateway:Request("DELETE", "/carry/stop", {})
 	else
 		-- Drop carried player
 		local item = carriedList[carriedIndex]
 		if item and item.id then 
-			CarryRemote:FireServer("Stop", {
-				targetId = item.id
+			NetworkGateway:Request("DELETE", "/carry/stop", {
+				TargetId = item.id
 			})
 		end
 	end

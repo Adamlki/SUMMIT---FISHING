@@ -474,20 +474,30 @@ end
 
 local function sendStart(carrier, target)
 	local total = countCarried(carrier)
-	CarryRemote:FireClient(carrier, "Start", { carrierId = carrier.UserId, carrierName = carrier.DisplayName, targetId = target.UserId, targetName = target.DisplayName, youAreCarrier = true, carrierActiveCount = total })
-	CarryRemote:FireClient(target, "Start", { carrierId = carrier.UserId, carrierName = carrier.DisplayName, targetId = target.UserId, targetName = target.DisplayName, youAreCarrier = false })
+	local carrierPayload = { carrierId = carrier.UserId, carrierName = carrier.DisplayName, targetId = target.UserId, targetName = target.DisplayName, youAreCarrier = true, carrierActiveCount = total }
+	local targetPayload = { carrierId = carrier.UserId, carrierName = carrier.DisplayName, targetId = target.UserId, targetName = target.DisplayName, youAreCarrier = false }
+	CarryRemote:FireClient(carrier, "Start", carrierPayload)
+	CarryRemote:FireClient(target, "Start", targetPayload)
+	NetworkGateway:Broadcast("Carry/Event", { Action = "Start", Data = carrierPayload }, carrier)
+	NetworkGateway:Broadcast("Carry/Event", { Action = "Start", Data = targetPayload }, target)
 end
 
 local function sendEndForCarrierOnly(carrier, removedTarget, reason)
 	local total = countCarried(carrier)
-	CarryRemote:FireClient(carrier, "End", { reason = reason or "end", youAreCarrier = true, carrierActiveCount = total, removedId = removedTarget.UserId, removedName = removedTarget.DisplayName })
+	local payload = { reason = reason or "end", youAreCarrier = true, carrierActiveCount = total, removedId = removedTarget.UserId, removedName = removedTarget.DisplayName }
+	CarryRemote:FireClient(carrier, "End", payload)
+	NetworkGateway:Broadcast("Carry/Event", { Action = "End", Data = payload }, carrier)
 end
 
 local function sendEndPair(carrier, target, reason)
 	local total = countCarried(carrier)
-	CarryRemote:FireClient(carrier, "End", { reason = reason or "end", youAreCarrier = true, carrierActiveCount = total, removedId = target.UserId, removedName = target.DisplayName })
+	local carrierPayload = { reason = reason or "end", youAreCarrier = true, carrierActiveCount = total, removedId = target.UserId, removedName = target.DisplayName }
 	local still = countCarried(target)
-	CarryRemote:FireClient(target, "End", { reason = reason or "end", youAreCarrier = false, yourCarryCount = still })
+	local targetPayload = { reason = reason or "end", youAreCarrier = false, yourCarryCount = still }
+	CarryRemote:FireClient(carrier, "End", carrierPayload)
+	CarryRemote:FireClient(target, "End", targetPayload)
+	NetworkGateway:Broadcast("Carry/Event", { Action = "End", Data = carrierPayload }, carrier)
+	NetworkGateway:Broadcast("Carry/Event", { Action = "End", Data = targetPayload }, target)
 end
 
 local function detachPair(carrier, target, reason)
@@ -795,7 +805,9 @@ local function requestCarry(player, targetId)
 	end
 
 	pending[target.UserId] = { requester = player, time = os.clock() }
-	CarryRemote:FireClient(target, "Prompt", { fromId = player.UserId, fromName = player.DisplayName })
+	local promptPayload = { fromId = player.UserId, fromName = player.DisplayName }
+	CarryRemote:FireClient(target, "Prompt", promptPayload)
+	NetworkGateway:Broadcast("Carry/Event", { Action = "Prompt", Data = promptPayload }, target)
 	return carrySuccess({ TargetId = targetId }, "Carry request sent.")
 end
 

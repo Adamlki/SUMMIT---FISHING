@@ -8,6 +8,7 @@
 local StarterGui        = game:GetService("StarterGui")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players           = game:GetService("Players")
+local NetworkGateway    = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 
 local player = Players.LocalPlayer
 
@@ -63,19 +64,30 @@ end
 
 local function carry(targetPlayer)
 	if not targetPlayer or not targetPlayer:IsA("Player") then return end
-	if carryRemote then carryRemote:FireServer("Request", { targetId = targetPlayer.UserId }) end
-	StarterGui:SetCore("SendNotification", {
-		Title = "Carry Request Sent",
-		Text  = "You sent a carry request to " .. targetPlayer.DisplayName,
-		Duration = 3
-	})
+	NetworkGateway:Request("POST", "/carry/request", { TargetId = targetPlayer.UserId }):andThen(function(res)
+		if res and res.Success then
+			StarterGui:SetCore("SendNotification", {
+				Title = "Carry Request Sent",
+				Text  = "You sent a carry request to " .. targetPlayer.DisplayName,
+				Duration = 3
+			})
+		else
+			local msg = (res and res.Message) or "Failed to send carry request."
+			StarterGui:SetCore("SendNotification", {
+				Title = "Carry Notice",
+				Text  = msg,
+				Duration = 3
+			})
+		end
+	end)
 end
 
 local function stopCarry()
-	if carryRemote then carryRemote:FireServer("Stop") end
-	StarterGui:SetCore("SendNotification", {
-		Title = "Carry Stopped", Text = "You stopped carrying.", Duration = 2
-	})
+	NetworkGateway:Request("DELETE", "/carry/stop", {}):andThen(function()
+		StarterGui:SetCore("SendNotification", {
+			Title = "Carry Stopped", Text = "You stopped carrying.", Duration = 2
+		})
+	end)
 end
 
 syncBind.Event:Connect(sync)
