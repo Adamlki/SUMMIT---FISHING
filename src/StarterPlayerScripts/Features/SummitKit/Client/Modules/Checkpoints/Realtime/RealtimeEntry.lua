@@ -7,11 +7,12 @@ local Packages = Shared.Packages
 local Janitor = require(Packages.Janitor)
 local Helpers = script.Parent:WaitForChild("Helpers")
 local RealtimeServiceSync = require(Helpers:WaitForChild("RealtimeServiceSync"))
+local MonetizationConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("MonetizationConfig"))
 
 local RealtimeEntry = {}
 RealtimeEntry.__index = RealtimeEntry
 
-local VIP_GAMEPASS_ID = 1590939529
+local VIP_GAMEPASS_ID = MonetizationConfig.VIP.LegacyGamePassId
 
 local function formatNumber(n)
 	local str = tostring(math.floor(tonumber(n) or 0))

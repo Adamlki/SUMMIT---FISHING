@@ -12,6 +12,8 @@
 
 -- ==============================================================================
 
+local MonetizationConfig = require(script.Parent:WaitForChild("MonetizationConfig"))
+
 
 export type ShopToolItem = {
 
@@ -69,9 +71,9 @@ ToolDistributionConfig.VIPTools = {
 
 ToolDistributionConfig.VIPGamepassIds = {
 
-	1874479701, -- Gamepass VIP di Toko Eksklusif
+	MonetizationConfig.VIP.GamePassId,
 
-	1590939529, -- Gamepass VIP Legacy
+	MonetizationConfig.VIP.LegacyGamePassId,
 
 }
 
@@ -131,7 +133,7 @@ ToolDistributionConfig.ShopTools = {
 
 		DisplayName = "Boombox Radio",
 
-		GamePassId = 0, -- Masukkan ID Gamepass dari Creator Hub
+		GamePassId = MonetizationConfig.Tools.BoomBox, -- Masukkan ID Gamepass dari Creator Hub
 
 		PriceRobux = 20,
 
@@ -147,7 +149,7 @@ ToolDistributionConfig.ShopTools = {
 
 		DisplayName = "Void Sword",
 
-		GamePassId = 0,
+		GamePassId = MonetizationConfig.Tools.Void,
 
 		PriceRobux = 100,
 
@@ -163,7 +165,7 @@ ToolDistributionConfig.ShopTools = {
 
 		DisplayName = "Poison Dagger",
 
-		GamePassId = 0,
+		GamePassId = MonetizationConfig.Tools.Poison,
 
 		PriceRobux = 75,
 

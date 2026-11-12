@@ -8,27 +8,18 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local StarterGui = game:GetService("StarterGui")
-task.spawn(function()
-	local attempts = 0
-	while attempts < 30 do
-		local ok = pcall(function()
-			StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
-		end)
-		if ok then break end
-		attempts = attempts + 1
-		task.wait(0.1)
-	end
-end)
 
 local CollectionService = game:GetService("CollectionService")
 local UserInputService = game:GetService("UserInputService")
 local SoundService = game:GetService("SoundService")
 local StarterPack = game:GetService("StarterPack")
+local FeatureFlags = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("FeatureFlags"))
+if not FeatureFlags.Inventory then return end
 
 local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 local RoleConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("RoleConfig"))
 local FishingConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("FishingConfig"))
+local MonetizationConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("MonetizationConfig"))
 
 local Core = require(script.Parent.Modules.Core)
 local Viewport = require(script.Parent.Modules.Viewport)
@@ -43,7 +34,6 @@ function Controller.new()
 	local self = setmetatable({}, Controller)
 	self.Players = Players
 	self.ReplicatedStorage = ReplicatedStorage
-	self.StarterGui = StarterGui
 	self.CollectionService = CollectionService
 	self.UserInputService = UserInputService
 	self.SoundService = SoundService
@@ -59,7 +49,7 @@ function Controller.new()
 
 	self.player = Players.LocalPlayer
 	self.playerGui = self.player:WaitForChild("PlayerGui")
-	self.VIP_GAMEPASS_ID = 1590939529
+	self.VIP_GAMEPASS_ID = MonetizationConfig.VIP.LegacyGamePassId
 	self.isVIP = false
 
 	self.gui = nil
@@ -119,22 +109,15 @@ function Controller:RefreshAllData()
 	self.allRodData = fullData.Rods or {}
 
 	if next(self.rodToolStats) == nil then
-		local rodShopEvents = self.FishingSystem:FindFirstChild("RodShopEvents")
-		if rodShopEvents then
-			local rfGetShopData = rodShopEvents:FindFirstChild("GetShopData")
-			if rfGetShopData then
-				local success2, shopData = pcall(function()
-					return rfGetShopData:InvokeServer()
-				end)
-
-				if success2 and shopData and shopData.AllRodData then
-					for rodName, data in pairs(shopData.AllRodData) do
-						self.rodToolStats[rodName] = {
-							Stats = data.Stats,
-							TextureId = data.TextureId
-						}
-					end
-				end
+		local okShop, resShop = self.NetworkGateway:Request("GET", "/shop/rods"):await()
+		local shopData = okShop and type(resShop) == "table" and resShop.Success and resShop.Data or nil
+		local rodData = type(shopData) == "table" and (shopData.AllRodData or shopData.Catalog) or nil
+		if type(rodData) == "table" then
+			for rodName, data in pairs(rodData) do
+				self.rodToolStats[rodName] = {
+					Stats = data.Stats,
+					TextureId = data.TextureId
+				}
 			end
 		end
 	end
@@ -221,8 +204,6 @@ function Controller:ToggleInventory(visible)
 end
 
 function Controller:SetupCharacter(character)
-	StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
-
 	local guiSuccess = self:UpdateGUIReferences()
 	if not guiSuccess then
 		task.wait(1)
@@ -241,6 +222,12 @@ function Controller:SetupCharacter(character)
 		end
 	end
 	table.clear(self.connections)
+
+	table.insert(self.connections, self.player:GetAttributeChangedSignal("InventoryVersion"):Connect(function()
+		task.spawn(function()
+			self:RefreshAllData()
+		end)
+	end))
 
 	if self.Hotbar.Frame then
 		self.Hotbar.Frame.Visible = true
@@ -306,16 +293,24 @@ function Controller:SetupCharacter(character)
 	table.insert(self.connections, backpack.ChildRemoved:Connect(function(child)
 		if not child:IsA("Tool") then return end
 
-		task.wait(0.1)
-
-		local isFish = child:FindFirstChild("FishId")
+		-- Capture before the instance's descendants disappear on destroy.
+		local fishIdValue = child:FindFirstChild("FishId")
+		local fishId = fishIdValue and fishIdValue.Value
 		local isRod = self.CollectionService:HasTag(child, "Rod")
+
+		task.wait(0.1)
 
 		local stillExists = self.player.Backpack:FindFirstChild(child.Name) or
 			(self.player.Character and self.player.Character:FindFirstChild(child.Name))
 
 		if stillExists then
 			return
+		end
+
+		if fishId then
+			task.spawn(function()
+				self:RefreshAllData()
+			end)
 		end
 
 		if isRod and child.Name == self.lastEquippedRodName then
@@ -339,32 +334,14 @@ function Controller:SetupCharacter(character)
 			self.lastEquippedToolName2 = nil
 			self:UpdateToolVisual2(nil)
 			self:SaveHotbarState()
-		elseif isFish and child:FindFirstChild("FishId") and child.FishId.Value == self.lastEquippedFishId1 then
-			local fishStillExists = false
-			for _, fish in ipairs(self.allFishData) do
-				if fish.uniqueId == self.lastEquippedFishId1 then
-					fishStillExists = true
-					break
-				end
-			end
-			if not fishStillExists then
-				self.lastEquippedFishId1 = nil
-				self:UpdateFishVisual1(nil)
-				self:SaveHotbarState()
-			end
-		elseif isFish and child:FindFirstChild("FishId") and child.FishId.Value == self.lastEquippedFishId2 then
-			local fishStillExists = false
-			for _, fish in ipairs(self.allFishData) do
-				if fish.uniqueId == self.lastEquippedFishId2 then
-					fishStillExists = true
-					break
-				end
-			end
-			if not fishStillExists then
-				self.lastEquippedFishId2 = nil
-				self:UpdateFishVisual2(nil)
-				self:SaveHotbarState()
-			end
+		elseif fishId and fishId == self.lastEquippedFishId1 then
+			self.lastEquippedFishId1 = nil
+			self:UpdateFishVisual1(nil)
+			self:SaveHotbarState()
+		elseif fishId and fishId == self.lastEquippedFishId2 then
+			self.lastEquippedFishId2 = nil
+			self:UpdateFishVisual2(nil)
+			self:SaveHotbarState()
 		end
 	end))
 
@@ -376,9 +353,35 @@ function Controller:SetupCharacter(character)
 	end))
 
 	table.insert(self.connections, character.ChildRemoved:Connect(function(child)
-		if child:IsA("Tool") then
-			self:OnToolChanged(nil)
+		if not child:IsA("Tool") then return end
+
+		local fishIdValue = child:FindFirstChild("FishId")
+		local fishId = fishIdValue and fishIdValue.Value
+
+		task.wait(0.1)
+
+		local backpack = self.player:FindFirstChild("Backpack")
+		local currentCharacter = self.player.Character
+		local stillExists = (backpack and backpack:FindFirstChild(child.Name)) or
+			(currentCharacter and currentCharacter:FindFirstChild(child.Name))
+
+		if not stillExists and fishId then
+			if self.lastEquippedFishId1 == fishId then
+				self.lastEquippedFishId1 = nil
+				self:UpdateFishVisual1(nil)
+				self:SaveHotbarState()
+			end
+			if self.lastEquippedFishId2 == fishId then
+				self.lastEquippedFishId2 = nil
+				self:UpdateFishVisual2(nil)
+				self:SaveHotbarState()
+			end
+			task.spawn(function()
+				self:RefreshAllData()
+			end)
 		end
+
+		self:OnToolChanged(nil)
 	end))
 end
 
@@ -396,15 +399,6 @@ end
 
 local controller = Controller.new()
 controller:UpdateGUIReferences()
-
-StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
-
-task.spawn(function()
-	while true do
-		task.wait(1)
-		StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
-	end
-end)
 
 UserInputService.InputBegan:Connect(function(input, gameProcessed)
 	controller:HandleKeyPress(input, gameProcessed)

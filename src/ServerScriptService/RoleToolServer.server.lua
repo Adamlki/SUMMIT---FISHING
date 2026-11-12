@@ -6,6 +6,8 @@ local Players = game:GetService("Players")
 local ServerStorage = game:GetService("ServerStorage")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local MarketplaceService = game:GetService("MarketplaceService")
+local FeatureFlags = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("FeatureFlags"))
+if not FeatureFlags.RoleTools then return end
 
 local RoleConfig = require(ReplicatedStorage:WaitForChild("RoleConfig"))
 local ToolConfig = require(ReplicatedStorage:WaitForChild("ToolDistributionConfig"))

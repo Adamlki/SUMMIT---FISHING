@@ -9,6 +9,10 @@ local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
+local Configs = ReplicatedStorage:WaitForChild("Configs")
+local FeatureFlags = require(Configs:WaitForChild("FeatureFlags"))
+if not FeatureFlags.Shop then return end
+local MonetizationConfig = require(Configs:WaitForChild("MonetizationConfig"))
 
 local FishingSystem = ReplicatedStorage:WaitForChild("FishingSystem")
 local rodAssetsFolder = FishingSystem:WaitForChild("Assets"):WaitForChild("Rod")
@@ -88,19 +92,46 @@ end
 -- ===================================================================
 -- PLAYER ADDED & VIP AUTO-GRANT
 -- ===================================================================
+-- VIP entitlement cache: avoids one web call per shop request.
+local VIP_CACHE_SECONDS = 60
+local vipCache = setmetatable({}, { __mode = "k" })
+
+local function ownsAnyVipPass(player: Player): boolean
+	local cached = vipCache[player]
+	if cached and (os.clock() - cached.at) < VIP_CACHE_SECONDS then
+		return cached.owns
+	end
+
+	local ownsAny = false
+	for _, passId in ipairs(MonetizationConfig.VIP.AllGamePassIds) do
+		local ok, owns = pcall(function()
+			return MarketplaceService:UserOwnsGamePassAsync(player.UserId, passId)
+		end)
+		if ok and owns then
+			ownsAny = true
+			break
+		end
+	end
+
+	vipCache[player] = { owns = ownsAny, at = os.clock() }
+	return ownsAny
+end
+
+MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player: Player, _gamePassId: number, wasPurchased: boolean)
+	if wasPurchased then
+		vipCache[player] = nil
+	end
+end)
+
+Players.PlayerRemoving:Connect(function(player: Player)
+	vipCache[player] = nil
+end)
+
 local function handlePlayerVipSync(player: Player)
 	local isOwner = RoleConfig.IsOwner(player)
 	local isVIP = isOwner or (player:GetAttribute("VIP") == true) or (player:GetAttribute("IsVIP") == true)
 	if not isVIP then
-		for _, passId in ipairs({ 1874479701, 1590939529 }) do
-			local ok, owns = pcall(function()
-				return MarketplaceService:UserOwnsGamePassAsync(player.UserId, passId)
-			end)
-			if ok and owns then
-				isVIP = true
-				break
-			end
-		end
+		isVIP = ownsAnyVipPass(player)
 	end
 
 	if isVIP then
@@ -161,16 +192,10 @@ local function getShopData(player: Player)
 	-- Pastikan pemain VIP otomatis memiliki Gold Rod dan GreenTrail
 	local isVIP = (player:GetAttribute("VIP") == true) or (player:GetAttribute("IsVIP") == true)
 	if not isVIP then
-		for _, passId in ipairs({ 1874479701, 1590939529 }) do
-			local ok, owns = pcall(function()
-				return MarketplaceService:UserOwnsGamePassAsync(player.UserId, passId)
-			end)
-			if ok and owns then
-				player:SetAttribute("VIP", true)
-				player:SetAttribute("IsVIP", true)
-				isVIP = true
-				break
-			end
+		isVIP = ownsAnyVipPass(player)
+		if isVIP then
+			player:SetAttribute("VIP", true)
+			player:SetAttribute("IsVIP", true)
 		end
 	end
 
@@ -232,7 +257,7 @@ local function buyRodWithCoins(player: Player, rodName: string)
 		local hasVip = (player:GetAttribute("VIP") == true) or (player:FindFirstChild("VIP") ~= nil)
 		if not hasVip then
 			local ok, owns = pcall(function()
-				return MarketplaceService:UserOwnsGamePassAsync(player.UserId, 1874479701)
+				return MarketplaceService:UserOwnsGamePassAsync(player.UserId, MonetizationConfig.VIP.GamePassId)
 			end)
 			if ok and owns then
 				player:SetAttribute("VIP", true)
@@ -373,33 +398,53 @@ end, { rateLimitSeconds = 1 })
 -- DUAL-STACK LEGACY HANDLERS
 -- ===================================================================
 
+local function legacyInvoke(player: Player, key: string, handler: () -> any, fallback: any)
+	local ok, result = NetworkGateway:RunLegacy(player, key, handler, 0.5)
+	if ok then
+		return result
+	end
+	return fallback
+end
+
 rfGetShopData.OnServerInvoke = function(player: Player)
-	return getShopData(player)
+	return legacyInvoke(player, "shopData", function()
+		return getShopData(player)
+	end, {})
 end
 
 rfEquipRod.OnServerInvoke = function(player: Player, rodName: string)
-	if type(rodName) ~= "string" then return false end
-	return equipRodToCharacter(player, rodName)
+	return legacyInvoke(player, "shopEquipRod", function()
+		if type(rodName) ~= "string" then return false end
+		return equipRodToCharacter(player, rodName)
+	end, false)
 end
 
 reRequestPurchase.OnServerEvent:Connect(function(player: Player, rodName: string)
-	if type(rodName) ~= "string" then return end
-	buyRodWithCoins(player, rodName)
+	NetworkGateway:RunLegacy(player, "shopRequestPurchase", function()
+		if type(rodName) ~= "string" then return end
+		buyRodWithCoins(player, rodName)
+	end, 0.5)
 end)
 
 rfBuyCoinPack.OnServerInvoke = function(player: Player, packName: string)
-	return buyCoinPack(player, packName)
+	return legacyInvoke(player, "shopBuyCoinPack", function()
+		return buyCoinPack(player, packName)
+	end, { success = false, message = "Terlalu cepat, coba lagi sebentar." })
 end
 
 rfBuyServerLuck.OnServerInvoke = function(player: Player)
-	return buyServerLuck(player)
+	return legacyInvoke(player, "shopBuyServerLuck", function()
+		return buyServerLuck(player)
+	end, { success = false, message = "Terlalu cepat, coba lagi sebentar." })
 end
 
 rfRequestGift.OnServerInvoke = function(player: Player, itemCategory: string, itemId: string, targetUserId: number)
-	return {
-		success = false,
-		message = "Fitur gift saat ini belum tersedia dan memerlukan konfigurasi Developer Product resmi pada Roblox Dashboard."
-	}
+	return legacyInvoke(player, "shopRequestGift", function()
+		return {
+			success = false,
+			message = "Fitur gift saat ini belum tersedia dan memerlukan konfigurasi Developer Product resmi pada Roblox Dashboard."
+		}
+	end, { success = false, message = "Terlalu cepat, coba lagi sebentar." })
 end
 
 -- ===================================================================
@@ -409,7 +454,7 @@ MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player: Playe
 	if not wasPurchased then return end
 
 	-- Check VIP Gamepass
-	if purchasedGamepassId == 1874479701 or purchasedGamepassId == 1590939529 then
+	if MonetizationConfig.IsVIPGamePass(purchasedGamepassId) then
 		player:SetAttribute("VIP", true)
 		GameProfileService:AddRod(player, "Gold Rod")
 		GameProfileService:AddTrail(player, "GreenTrail")

@@ -38,32 +38,57 @@ local RECEIPT_RETENTION_SECONDS = 60 * 60 * 24 * 90
 
 local function getReceiptLog(userId)
 	if receiptCache[userId] then return receiptCache[userId] end
-	local log = {}
-	if receiptStore then
+	if not receiptStore then return nil end
+
+	local attempts = DataStoreConfig.Retry and DataStoreConfig.Retry.MaxAttempts or 3
+	local backoff = DataStoreConfig.Retry and DataStoreConfig.Retry.BackoffSeconds or 0.5
+
+	for attempt = 1, attempts do
 		local ok, res = pcall(function()
 			return receiptStore:GetAsync("Receipts_" .. tostring(userId))
 		end)
-		if ok and type(res) == "table" then log = res end
+		if ok then
+			local log = (type(res) == "table") and res or {}
+			receiptCache[userId] = log
+			return log
+		end
+		if attempt < attempts then
+			task.wait(backoff * attempt)
+		end
 	end
-	receiptCache[userId] = log
-	return log
+
+	warn("[UnifiedPurchaseGateway] Failed to load receipt log for " .. tostring(userId))
+	return nil
 end
 
 local function saveReceiptLog(userId, log)
-	if not receiptStore then return end
+	if not receiptStore then return false end
 	local snapshot = {}
 	for id, ts in pairs(log) do snapshot[id] = ts end
-	pcall(function()
-		receiptStore:UpdateAsync("Receipts_" .. tostring(userId), function(old)
-			old = (type(old) == "table") and old or {}
-			for id, ts in pairs(snapshot) do old[id] = ts end
-			return old
+	local attempts = DataStoreConfig.Retry and DataStoreConfig.Retry.MaxAttempts or 3
+	local backoff = DataStoreConfig.Retry and DataStoreConfig.Retry.BackoffSeconds or 0.5
+
+	for attempt = 1, attempts do
+		local ok = pcall(function()
+			receiptStore:UpdateAsync("Receipts_" .. tostring(userId), function(old)
+				old = (type(old) == "table") and old or {}
+				for id, ts in pairs(snapshot) do old[id] = ts end
+				return old
+			end)
 		end)
-	end)
+		if ok then return true end
+		if attempt < attempts then
+			task.wait(backoff * attempt)
+		end
+	end
+
+	warn("[UnifiedPurchaseGateway] Failed to save receipt log for " .. tostring(userId))
+	return false
 end
 
 local function recordReceipt(userId, purchaseId)
 	local log = getReceiptLog(userId)
+	if not log then return false end
 	log[tostring(purchaseId)] = os.time()
 	local now = os.time()
 	local kept = 0
@@ -81,7 +106,7 @@ local function recordReceipt(userId, purchaseId)
 		end
 		if oldestId then log[oldestId] = nil end
 	end
-	saveReceiptLog(userId, log)
+	return saveReceiptLog(userId, log)
 end
 
 Players.PlayerRemoving:Connect(function(player)
@@ -93,6 +118,9 @@ local handlerFunction = function(receiptInfo: { PlayerId: number, ProductId: num
 	local purchaseKey = receiptInfo.PurchaseId and tostring(receiptInfo.PurchaseId)
 
 	local log = getReceiptLog(userId)
+	if not log then
+		return Enum.ProductPurchaseDecision.NotProcessedYet
+	end
 	if purchaseKey and log[purchaseKey] then
 		return Enum.ProductPurchaseDecision.PurchaseGranted
 	end
@@ -190,7 +218,10 @@ local handlerFunction = function(receiptInfo: { PlayerId: number, ProductId: num
 	end
 
 	if purchaseKey and decision == Enum.ProductPurchaseDecision.PurchaseGranted then
-		recordReceipt(userId, purchaseKey)
+		if not recordReceipt(userId, purchaseKey) then
+			-- The grant already happened. Keep the in-memory marker so an immediate retry is not granted twice.
+			warn("[UnifiedPurchaseGateway] Grant completed but receipt log was not saved for " .. tostring(userId))
+		end
 	end
 
 	return decision

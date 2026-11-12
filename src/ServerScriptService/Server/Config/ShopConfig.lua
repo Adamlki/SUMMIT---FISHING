@@ -1,5 +1,7 @@
 --!nonstrict
+local DataStoreConfig = require(game:GetService("ServerScriptService"):WaitForChild("Configs"):WaitForChild("DataStoreConfig"))
+
 return {
-    ProfileKey = "ShopToolsData",
+    ProfileKey = DataStoreConfig.Stores.ShopToolsData,
     ToolsFolderName = "ShopTools",
 }

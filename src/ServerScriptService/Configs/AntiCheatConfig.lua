@@ -1,5 +1,7 @@
 --!strict
 -- Server-private anti-cheat thresholds and network limits.
+local SharedNetworkConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("Config"):WaitForChild("NetworkConfig"))
+
 local AntiCheatConfig = {
 	Speedrun = {
 		Enabled = false,
@@ -8,8 +10,21 @@ local AntiCheatConfig = {
 	},
 
 	Network = {
-		RequestTimeoutSeconds = 5,
-		DefaultRateLimitSeconds = 0,
+		RequestTimeoutSeconds = SharedNetworkConfig.RequestTimeoutSeconds,
+		DefaultRateLimitSeconds = SharedNetworkConfig.DefaultRateLimitSeconds,
+		MaxIdentifierLength = SharedNetworkConfig.MaxIdentifierLength,
+		Inventory = {
+			EquipSeconds = 0.5,
+			ReadSeconds = 0.5,
+			SellSeconds = 2,
+		},
+	},
+
+	Fishing = {
+		FishCooldownSeconds = 0.5,
+		GrantMinIntervalSeconds = 2.5,
+		MinMinigameDurationSeconds = 0.4,
+		PendingRollTimeoutSeconds = 120,
 	},
 
 	AntiAFK = {

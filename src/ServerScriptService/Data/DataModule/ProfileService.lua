@@ -2109,7 +2109,8 @@ if IsStudio == true then
 	task.spawn(function()
 		local status, message = pcall(function()
 			-- This will error if current instance has no Studio API access:
-			DataStoreService:GetDataStore("____PS"):SetAsync("____PS", os.time())
+			-- Use a separate Studio store so the probe never writes to live profile keys.
+			DataStoreService:GetDataStore("____PS_Studio"):SetAsync("____PS_Studio", os.time())
 		end)
 		local no_internet_access = status == false and string.find(message, "ConnectFail", 1, true) ~= nil
 		if no_internet_access == true then

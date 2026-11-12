@@ -26,14 +26,16 @@ local Workspace = game:GetService("Workspace")
 local Shared = ReplicatedStorage:WaitForChild("Shared") :: Instance
 local Packages = Shared:WaitForChild("Packages") :: Instance
 local Promise: any = require(Packages:WaitForChild("Promise") :: ModuleScript)
+local NetworkConfig = require(Shared:WaitForChild("Config"):WaitForChild("NetworkConfig"))
 
 local networkFolder = script.Parent :: Instance
 
 local REMOTES_FOLDER_NAME = "Remotes"
 local REQUEST_REMOTE_NAME = "NetworkGateway"
 local STREAM_REMOTE_NAME = "NetworkStream"
-local REQUEST_TIMEOUT_SECONDS = 5
-local REMOTE_WAIT_SECONDS = 10
+local REQUEST_TIMEOUT_SECONDS = NetworkConfig.RequestTimeoutSeconds
+local REMOTE_WAIT_SECONDS = NetworkConfig.RemoteWaitSeconds
+local MAX_IN_FLIGHT_PER_PLAYER = NetworkConfig.MaxInFlightPerPlayer or 4
 
 export type Response = {
 	Success: boolean,
@@ -72,6 +74,8 @@ local VALID_METHODS: { [string]: boolean } = {
 }
 
 local routes: { [string]: RouteEntry } = {}
+local activeRequests: { [Player]: number } = setmetatable({}, { __mode = "k" }) :: { [Player]: number }
+local legacyLastRequest: { [Player]: { [string]: number } } = setmetatable({}, { __mode = "k" }) :: { [Player]: { [string]: number } }
 local serverRequestRemote: RemoteFunction? = nil
 local serverStreamRemote: RemoteEvent? = nil
 local clientRequestRemote: RemoteFunction? = nil
@@ -293,7 +297,17 @@ local function handleRequest(player: Player, method: any, route: any, payload: a
 		ReceivedAt = now,
 	}
 
+	local inFlight = activeRequests[player] or 0
+	if inFlight >= MAX_IN_FLIGHT_PER_PLAYER then
+		return respond(false, 429, "TOO_MANY_REQUESTS", "Too many requests are already in progress.")
+	end
+	activeRequests[player] = inFlight + 1
+
 	local ok, result = pcall(entry.Handler, player, payload, context)
+
+	local remaining = (activeRequests[player] or 1) - 1
+	activeRequests[player] = remaining > 0 and remaining or nil
+
 	if not ok then
 		warn(string.format(
 			"[NetworkGateway] Handler error | player=%s | %s %s | %s",
@@ -372,7 +386,7 @@ function NetworkGateway:RegisterRoute(
 
 	assert(type(handlerFunction) == "function", "[NetworkGateway] handlerFunction must be a function.")
 
-	local rateLimitSeconds = 0
+	local rateLimitSeconds = NetworkConfig.DefaultRateLimitSeconds or 0
 	if options and options.rateLimitSeconds ~= nil then
 		local value = options.rateLimitSeconds
 		assert(
@@ -392,6 +406,61 @@ function NetworkGateway:RegisterRoute(
 		RateLimitSeconds = rateLimitSeconds,
 		LastRequest = setmetatable({}, { __mode = "k" }) :: { [Player]: number },
 	}
+end
+
+-- Shared guard for pre-gateway remotes so they obey the same per-player cap.
+function NetworkGateway:RunLegacy(
+	player: Player,
+	key: string,
+	handler: () -> any,
+	rateLimitSeconds: number?
+): (boolean, any)
+	assert(RunService:IsServer(), "[NetworkGateway] RunLegacy can only be called on the server.")
+	assert(type(key) == "string" and #key > 0, "[NetworkGateway] RunLegacy key must be a non-empty string.")
+	assert(type(handler) == "function", "[NetworkGateway] RunLegacy handler must be a function.")
+	if not player or not player:IsDescendantOf(Players) then
+		return false, nil
+	end
+
+	local now = Workspace:GetServerTimeNow()
+	local perPlayer = legacyLastRequest[player]
+	if not perPlayer then
+		perPlayer = {}
+		legacyLastRequest[player] = perPlayer
+	end
+
+	local limit = rateLimitSeconds
+	if limit == nil then
+		limit = NetworkConfig.DefaultRateLimitSeconds or 0
+	end
+	local lastRequest = perPlayer[key]
+	if limit > 0 and lastRequest and now - lastRequest < limit then
+		return false, nil
+	end
+	perPlayer[key] = now
+
+	local inFlight = activeRequests[player] or 0
+	if inFlight >= MAX_IN_FLIGHT_PER_PLAYER then
+		return false, nil
+	end
+	activeRequests[player] = inFlight + 1
+
+	local ok, result = pcall(handler)
+
+	local remaining = (activeRequests[player] or 1) - 1
+	activeRequests[player] = remaining > 0 and remaining or nil
+
+	if not ok then
+		warn(string.format(
+			"[NetworkGateway] Legacy handler error | player=%s | key=%s | %s",
+			player.Name,
+			key,
+			tostring(result)
+		))
+		return false, result
+	end
+
+	return true, result
 end
 
 function NetworkGateway:Broadcast(eventName: string, data: any?, target: Player?): ()
@@ -497,6 +566,8 @@ end
 
 if RunService:IsServer() then
 	Players.PlayerRemoving:Connect(function(player: Player)
+		activeRequests[player] = nil
+		legacyLastRequest[player] = nil
 		for _, entry in pairs(routes) do
 			entry.LastRequest[player] = nil
 		end

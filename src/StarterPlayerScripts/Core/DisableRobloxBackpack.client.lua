@@ -7,6 +7,8 @@ local StarterGui = game:GetService("StarterGui")
 local Players = game:GetService("Players")
 local player = Players.LocalPlayer
 
+local announced = false
+
 local function enforceDisableBackpack()
 	task.spawn(function()
 		local attempts = 0
@@ -14,10 +16,17 @@ local function enforceDisableBackpack()
 			local ok = pcall(function()
 				StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Backpack, false)
 			end)
-			if ok then break end
+			if ok then
+				if not announced then
+					announced = true
+					print("[DisableRobloxBackpack] Roblox default backpack hotbar suppressed successfully.")
+				end
+				return
+			end
 			attempts = attempts + 1
 			task.wait(0.1)
 		end
+		warn("[DisableRobloxBackpack] Failed to disable Roblox backpack after 30 attempts.")
 	end)
 end
 
@@ -28,5 +37,3 @@ enforceDisableBackpack()
 player.CharacterAdded:Connect(function()
 	enforceDisableBackpack()
 end)
-
-print("🛡️ [DisableRobloxBackpack] Roblox default backpack hotbar suppressed successfully.")

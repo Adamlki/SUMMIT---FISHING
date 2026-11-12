@@ -8,5 +8,7 @@ Configs.ShopMasterConfig = require(script:WaitForChild("ShopMasterConfig"))
 Configs.ToolDistributionConfig = require(script:WaitForChild("ToolDistributionConfig"))
 Configs.DonationConfig = require(script:WaitForChild("DonationConfig"))
 Configs.TitleConfig = require(script:WaitForChild("TitleConfig"))
+Configs.MonetizationConfig = require(script:WaitForChild("MonetizationConfig"))
+Configs.FeatureFlags = require(script:WaitForChild("FeatureFlags"))
 
 return Configs

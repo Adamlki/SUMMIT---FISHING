@@ -20,14 +20,6 @@ FishingConfig.SellingSettings = {
 	}
 }
 
-FishingConfig.ProjectileSettings = {
-	enabled = true, behindPlayerDistance = 5, landingHeightOffset = 1, flightTime = 0.8,
-	rotationAngle = 45, landingSpeedThreshold = 5, landingVelocityY = 2,
-	landingRayDistance = 5, landingGroundDistance = 3, detectionDelay = 0.5,
-	fadeInDuration = 0.2, fadeOutDuration = 0.6, safetyTimeout = 3,
-	randomLanding = false, randomBehindRange = {min = 4, max = 7}, randomSideRange = {min = -2, max = 2}
-}
-
 -- 🎯 EASY TAP COUNT ADJUSTMENT
 FishingConfig.MinigameSettings = {
 	progressMin = 8, progressMax = 12, decayMin = 3, decayMax = 7,
@@ -162,7 +154,7 @@ FishingConfig.FishTable = {
 	{name = "Shark Bone", probability = 0.01, minKg = 200.0, maxKg = 800.0, rarity = "Secret"},
 	{name = "King Crab", probability = 0.01, minKg = 200.0, maxKg = 800.0, rarity = "Secret"},
 	{name = "Naga", probability = 0.011, minKg = 200.0, maxKg = 800.0, rarity = "Secret"},
-	{name = "El Maja", probability = 30, minKg = 200.0, maxKg = 800.0, rarity = "Secret"},
+	{name = "El Maja", probability = 0.01, minKg = 200.0, maxKg = 800.0, rarity = "Secret"},
 	{name = "Mega Hunt", probability = 0.011, minKg = 200.0, maxKg = 800.0, rarity = "Secret"},
 	{name = "Buaya Hutan", probability = 0.011, minKg = 200.0, maxKg = 800.0, rarity = "Secret"},
 	{name = "KingJally Strong", probability = 0.021, minKg = 200.0, maxKg = 800.0, rarity = "Secret"}

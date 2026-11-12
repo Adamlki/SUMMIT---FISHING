@@ -127,6 +127,17 @@ end
 -- ===== [FITUR BARU] MEMBUAT GUI EFEK LANGKA =====
 -- ===================================================================
 local function createRareEffectGui(playerGui)
+	local existing = playerGui:FindFirstChild("RareFishEffectGui")
+	if existing then
+		local existingBg = existing:FindFirstChild("Background")
+		local existingText = existingBg and existingBg:FindFirstChild("RarityText")
+		local existingStroke = existingText and existingText:FindFirstChildOfClass("UIStroke")
+		if existingBg and existingText and existingStroke then
+			return existingBg, existingText, existingStroke
+		end
+		existing:Destroy()
+	end
+
 	local rareGui = Instance.new("ScreenGui")
 	rareGui.Name = "RareFishEffectGui"
 	rareGui.Enabled = false

@@ -4,6 +4,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TweenService = game:GetService("TweenService")
 local SocialService = game:GetService("SocialService")
 local MarketplaceService = game:GetService("MarketplaceService")
+local MonetizationConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("MonetizationConfig"))
 
 local player = Players.LocalPlayer
 local drawer = script.Parent :: Frame
@@ -119,11 +120,11 @@ updateGamepassIcons()
 -- Verify Gamepass ownership on start
 task.spawn(function()
 	local passes = {
-		{ Attr = "EdvancedLuck", Id = 1874483756 },
-		{ Attr = "ExtraLuck", Id = 1874483757 },
-		{ Attr = "SmallLuck", Id = 1874483758 },
-		{ Attr = "MoreMutations", Id = 1874483759 },
-		{ Attr = "VIP", Id = 1874479701 },
+		{ Attr = "EdvancedLuck", Id = MonetizationConfig.LuckPasses.EdvancedLuck },
+		{ Attr = "ExtraLuck", Id = MonetizationConfig.LuckPasses.ExtraLuck },
+		{ Attr = "SmallLuck", Id = MonetizationConfig.LuckPasses.SmallLuck },
+		{ Attr = "MoreMutations", Id = MonetizationConfig.LuckPasses.MoreMutations },
+		{ Attr = "VIP", Id = MonetizationConfig.VIP.GamePassId },
 	}
 	for _, p in ipairs(passes) do
 		if player:GetAttribute(p.Attr) ~= true then

@@ -15,6 +15,7 @@ local playerGui = localPlayer:WaitForChild("PlayerGui")
 local FishingSystem = ReplicatedStorage:WaitForChild("FishingSystem")
 local FishingConfig = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("FishingConfig"))
 local TransferSettings = FishingConfig.TransferSettings
+local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 
 local MAX_DISTANCE = TransferSettings.MaxDistance
 local PROMPT_NAME = "TransferFishPrompt"
@@ -28,6 +29,10 @@ local Info
 local Timer
 local YesButton
 local NoButton
+local GiftFish
+local GiftFishText
+local GiftFishAccept
+local GiftFishReject
 
 -- Function to refresh GUI references
 local function refreshGuiReferences()
@@ -38,16 +43,43 @@ local function refreshGuiReferences()
 	Timer = MainFrame:WaitForChild("Timer")
 	YesButton = MainFrame:WaitForChild("YesButton")
 	NoButton = MainFrame:WaitForChild("NoButton")
+	-- GUI lama tidak dipakai selama GiftFish ada; pastikan tidak ikut tampil.
+	TransferGui.Enabled = false
+	MainFrame.Visible = false
+
+	-- GUI penerima yang dibuat di FishingGui. Fallback ke TransferGui jika belum ada.
+	local fishingGui = playerGui:FindFirstChild("FishingGui") or playerGui:WaitForChild("FishingGui", 5)
+	GiftFish = fishingGui and fishingGui:FindFirstChild("GiftFish") or nil
+	if GiftFish then
+		GiftFishText = GiftFish:FindFirstChild("TextLabel")
+		local frameBtn = GiftFish:FindFirstChild("FrameBtn")
+		GiftFishAccept = frameBtn and frameBtn:FindFirstChild("AcceptButton") or nil
+		GiftFishReject = frameBtn and frameBtn:FindFirstChild("RejectButton") or nil
+		if GiftFishText and GiftFishAccept and GiftFishReject then
+			GiftFish.Visible = false
+		else
+			GiftFish = nil
+			GiftFishText = nil
+			GiftFishAccept = nil
+			GiftFishReject = nil
+		end
+	end
 end
 
 -- Initial GUI setup
 refreshGuiReferences()
+MainFrame.Visible = false
 
 -- == REMOTE EVENTS ==
-local TransferRequest = FishingSystem:WaitForChild("TransferRequest")
-local TransferResponse = FishingSystem:WaitForChild("TransferResponse")
 local TransferPrompt = FishingSystem:WaitForChild("TransferPrompt")
 local ShowNotification = FishingSystem:WaitForChild("ShowNotification")
+local ClientNotification = FishingSystem:FindFirstChild("ClientNotification")
+
+local function toast(message)
+	if ClientNotification then
+		ClientNotification:Fire(tostring(message), 3, Color3.fromRGB(255, 100, 100))
+	end
+end
 
 -- == LOCAL STATE ==
 local currentEquippedFish = nil
@@ -82,6 +114,10 @@ local function closeGui()
 	isGuiBusy = false
 	currentTransferId = nil
 	TransferGui.Enabled = false
+	MainFrame.Visible = false
+	if GiftFish then
+		GiftFish.Visible = false
+	end
 	YesButton.Visible = true
 	NoButton.Text = "No"
 end
@@ -95,14 +131,29 @@ local function showGui(data)
 
 	isGuiBusy = true
 	currentTransferId = data.transferId or nil
+	print(string.format("[Transfer] showGui | receiver=%s | giftFish=%s", tostring(data.transferId ~= nil), tostring(GiftFish ~= nil)))
 
-	Title.Text = data.title
-	Info.Text = data.info
-	YesButton.Text = data.yesText
-	NoButton.Text = data.noText or "No"
-	YesButton.Visible = (data.yesText ~= "")
-
-	TransferGui.Enabled = true
+	-- Satu GUI untuk pengirim dan penerima.
+	local useGiftFish = GiftFish ~= nil and GiftFishText ~= nil and GiftFishAccept ~= nil and GiftFishReject ~= nil
+	if useGiftFish then
+		GiftFishText.Text = data.info
+		GiftFishAccept.Text = data.yesText or "Accept"
+		GiftFishReject.Text = data.noText or "Reject"
+		GiftFish.Visible = true
+		TransferGui.Enabled = false
+		MainFrame.Visible = false
+	else
+		Title.Text = data.title
+		Info.Text = data.info
+		YesButton.Text = data.yesText
+		NoButton.Text = data.noText or "No"
+		YesButton.Visible = (data.yesText ~= "")
+		TransferGui.Enabled = true
+		MainFrame.Visible = true
+		if GiftFish then
+			GiftFish.Visible = false
+		end
+	end
 
 	local startTime = tick()
 	local duration = data.duration or 10
@@ -119,13 +170,30 @@ local function showGui(data)
 		if remaining <= 0 then
 			Timer.Text = "(0s)"
 			if currentTransferId then
-				TransferResponse:FireServer(currentTransferId, false)
+				NetworkGateway:Request("POST", "/transfer/respond", { TransferId = currentTransferId, Accept = false })
 			end
 			closeGui()
 		else
 			Timer.Text = string.format("(%ds)", remaining)
 		end
 	end)
+end
+
+-- Pasang tombol untuk prompt yang sedang aktif.
+local function bindGuiButtons(onAccept, onReject)
+	if yesButtonConnection then
+		yesButtonConnection:Disconnect()
+		yesButtonConnection = nil
+	end
+	if noButtonConnection then
+		noButtonConnection:Disconnect()
+		noButtonConnection = nil
+	end
+
+	local acceptButton = (GiftFish and GiftFishAccept) or YesButton
+	local rejectButton = (GiftFish and GiftFishReject) or NoButton
+	yesButtonConnection = acceptButton.MouseButton1Click:Connect(onAccept)
+	noButtonConnection = rejectButton.MouseButton1Click:Connect(onReject)
 end
 
 -- Function to check if a tool is a fish
@@ -135,6 +203,7 @@ local function getFishToolData(tool)
 	local fishId = tool:FindFirstChild("FishId")
 	local weight = tool:FindFirstChild("Weight")
 	local rarity = tool:FindFirstChild("Rarity")
+	local favorited = tool:FindFirstChild("isFavorited")
 
 	if fishId and weight and rarity then
 		return {
@@ -142,7 +211,8 @@ local function getFishToolData(tool)
 			Name = tool.Name,
 			Id = fishId.Value,
 			Weight = weight.Value,
-			Rarity = rarity.Value
+			Rarity = rarity.Value,
+			Favorited = favorited and favorited.Value == true
 		}
 	end
 	return nil
@@ -175,6 +245,7 @@ local function createPromptOnPlayer(targetPlayer)
 
 	-- Store connection
 	local connection = prompt.Triggered:Connect(function()
+		print(string.format("[Transfer] prompt triggered | target=%s | busy=%s", targetPlayer.Name, tostring(isGuiBusy)))
 		if not currentEquippedFish or isGuiBusy then 
 			return 
 		end
@@ -186,35 +257,31 @@ local function createPromptOnPlayer(targetPlayer)
 			return
 		end
 
+		if currentEquippedFish.Favorited then
+			toast("Ikan favorit tidak bisa ditransfer. Hapus favorit dulu.")
+			return
+		end
+
 		-- Show confirmation GUI for SENDER
 		showGui({
 			title = "Transfer Confirmation",
-			info = string.format("Give %s (%.1fkg) To %s?", currentEquippedFish.Name, currentEquippedFish.Weight, targetPlayer.Name),
-			yesText = "Confirm",
+			info = string.format("Give %s (%.1fkg) to %s?", currentEquippedFish.Name, currentEquippedFish.Weight, targetPlayer.Name),
+			yesText = "Give",
 			noText = "Cancel",
 			duration = 10,
 			transferId = nil
 		})
 
-		-- Disconnect old connections if they exist
-		if yesButtonConnection then
-			yesButtonConnection:Disconnect()
-		end
-		if noButtonConnection then
-			noButtonConnection:Disconnect()
-		end
-
-		-- Store the connections
-		yesButtonConnection = YesButton.MouseButton1Click:Connect(function()
+		bindGuiButtons(function()
 			if currentEquippedFish and currentEquippedFish.Tool and currentEquippedFish.Tool.Parent then
-				TransferRequest:FireServer(targetPlayer, currentEquippedFish.Id)
+				NetworkGateway:Request("POST", "/transfer/request", { TargetUserId = targetPlayer.UserId, FishId = currentEquippedFish.Id }):andThen(function(res)
+					if not (res and res.Success) then
+						toast((res and res.Message) or "Transfer gagal dikirim.")
+					end
+				end)
 			end
 			closeGui()
-		end)
-
-		noButtonConnection = NoButton.MouseButton1Click:Connect(function()
-			closeGui()
-		end)
+		end, closeGui)
 	end)
 
 	activePrompts[targetPlayer] = {
@@ -335,38 +402,33 @@ for _, player in pairs(Players:GetPlayers()) do
 	end
 end
 
--- 3. Global No button handler (for receiver's decline)
-NoButton.MouseButton1Click:Connect(function()
-	if currentTransferId then
-		TransferResponse:FireServer(currentTransferId, false)
-	end
-	closeGui()
-end)
-
--- 4. Monitor Events from Server (For RECEIVER)
+-- 3. Monitor Events from Server (For RECEIVER)
 TransferPrompt.OnClientEvent:Connect(function(senderPlayer, fishName, fishWeight, transferId)
+	print(string.format("[Transfer] prompt received | from=%s | fish=%s | id=%s", senderPlayer.Name, tostring(fishName), tostring(transferId)))
+
 	if isGuiBusy then
-		TransferResponse:FireServer(transferId, false)
+		NetworkGateway:Request("POST", "/transfer/respond", { TransferId = transferId, Accept = false })
 		return
 	end
 
 	showGui({
 		title = "Transfer Request",
-		info = string.format("%s want to give %s (%.1fkg)", senderPlayer.Name, fishName, fishWeight),
+		info = string.format("%s wants to give %s (%.1fkg).", senderPlayer.DisplayName or senderPlayer.Name, fishName, fishWeight),
 		yesText = "Accept",
-		noText = "Decline",
+		noText = "Reject",
 		duration = 10,
 		transferId = transferId
 	})
 
-	-- Disconnect old connection
-	if yesButtonConnection then
-		yesButtonConnection:Disconnect()
-	end
-
-	-- Store the connection
-	yesButtonConnection = YesButton.MouseButton1Click:Connect(function()
-		TransferResponse:FireServer(currentTransferId, true)
+	bindGuiButtons(function()
+		NetworkGateway:Request("POST", "/transfer/respond", { TransferId = currentTransferId, Accept = true }):andThen(function(res)
+			if not (res and res.Success) then
+				toast((res and res.Message) or "Transfer gagal diterima.")
+			end
+		end)
+		closeGui()
+	end, function()
+		NetworkGateway:Request("POST", "/transfer/respond", { TransferId = currentTransferId, Accept = false })
 		closeGui()
 	end)
 end)

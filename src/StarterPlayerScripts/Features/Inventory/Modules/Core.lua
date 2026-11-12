@@ -1,4 +1,5 @@
 local Module = {}
+local RoleConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("Configs"):WaitForChild("RoleConfig"))
 
 function Module.Install(Controller)
 function Controller:PlayClickSound()
@@ -198,13 +199,7 @@ function Controller:HasRemoteSellPermission()
 	if game.CreatorType == Enum.CreatorType.User and (self.player.UserId == game.CreatorId or game.CreatorId == 0) then
 		return true
 	end
-	local ADMIN_IDS = { 7319628066, 8978185974 }
-	for _, id in ipairs(ADMIN_IDS) do
-		if self.player.UserId == id then return true end
-	end
-	if self.player.Name == "GUARD_ZVxJekybix" then
-		return true
-	end
+	if RoleConfig.IsAdmin(self.player) then return true end
 	return false
 end
 

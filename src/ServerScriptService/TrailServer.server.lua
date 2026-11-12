@@ -7,6 +7,8 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local MarketplaceService = game:GetService("MarketplaceService")
 local RunService = game:GetService("RunService")
 local ServerScriptService = game:GetService("ServerScriptService")
+local FeatureFlags = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("FeatureFlags"))
+if not FeatureFlags.Trails then return end
 
 local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 
@@ -383,32 +385,64 @@ NetworkGateway:RegisterRoute("DELETE", "/trail/unequip", function(player)
 	}, res.message)
 end, { rateLimitSeconds = 0.5 })
 
+NetworkGateway:RegisterRoute("POST", "/trail/buy-robux", function(player, payload)
+	if type(payload) ~= "table" or type(payload.TrailId) ~= "string" or payload.TrailId == "" then
+		return respondFailure(400, "INVALID_PAYLOAD", "TrailId is required.")
+	end
+
+	local res = buyTrailWithRobux(player, payload.TrailId)
+	return {
+		Success = res.success == true,
+		StatusCode = if res.success then 200 else 400,
+		Data = res,
+		Message = res.message,
+	}
+end, { rateLimitSeconds = 0.5 })
+
 -- ===================================================================
 -- DUAL-STACK LEGACY HANDLERS
 -- ===================================================================
 
+local function legacyCall(player: Player, key: string, handler: () -> any, fallback: any)
+	local ok, result = NetworkGateway:RunLegacy(player, key, handler, 0.5)
+	if ok then
+		return result
+	end
+	return fallback
+end
+
 GetTrailDataRF.OnServerInvoke = function(player: Player)
-	local data = getTrailData(player)
-	return {
-		owned = data.Owned,
-		equipped = data.Equipped,
-	}
+	return legacyCall(player, "trailData", function()
+		local data = getTrailData(player)
+		return {
+			owned = data.Owned,
+			equipped = data.Equipped,
+		}
+	end, { owned = {}, equipped = "" })
 end
 
 BuyTrailWithCoinsRF.OnServerInvoke = function(player: Player, trailId: string)
-	return buyTrailWithCoins(player, trailId)
+	return legacyCall(player, "trailBuyCoins", function()
+		return buyTrailWithCoins(player, trailId)
+	end, { success = false, message = "Terlalu cepat, coba lagi sebentar." })
 end
 
 BuyTrailWithRobuxRF.OnServerInvoke = function(player: Player, trailId: string)
-	return buyTrailWithRobux(player, trailId)
+	return legacyCall(player, "trailBuyRobux", function()
+		return buyTrailWithRobux(player, trailId)
+	end, { success = false, message = "Terlalu cepat, coba lagi sebentar." })
 end
 
 EquipTrailRF.OnServerInvoke = function(player: Player, trailId: string)
-	return equipTrail(player, trailId)
+	return legacyCall(player, "trailEquip", function()
+		return equipTrail(player, trailId)
+	end, { success = false, message = "Terlalu cepat, coba lagi sebentar." })
 end
 
 UnequipTrailRF.OnServerInvoke = function(player: Player)
-	return unequipTrail(player)
+	return legacyCall(player, "trailUnequip", function()
+		return unequipTrail(player)
+	end, { success = false, message = "Terlalu cepat, coba lagi sebentar." })
 end
 
 -- ===================================================================

@@ -13,9 +13,10 @@ function DataManager:AddFishWithLimit(player, fishData)
 end
 
 function DataManager:AddExistingFish(player, fishEntry)
-	-- Not needed anymore since we use AddFish directly
-	local success, uniqueId = GameProfileService:AddFish(player, fishEntry)
-	return success
+	if GameProfileService.AddExistingFish then
+		return GameProfileService:AddExistingFish(player, fishEntry)
+	end
+	return false
 end
 
 function DataManager:RemoveFish(player, fishUniqueId)

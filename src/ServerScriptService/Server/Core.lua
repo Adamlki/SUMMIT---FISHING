@@ -3,6 +3,7 @@ local Players = game:GetService("Players")
 local ServerScriptService = game:GetService("ServerScriptService")
 
 local serverFolder = ServerScriptService.Server
+local DataStoreConfig = require(ServerScriptService:WaitForChild("Configs"):WaitForChild("DataStoreConfig"))
 
 local Core = {
 	_armed = false,
@@ -84,7 +85,7 @@ do
 	---@return any result Hasil dari fungsi `new`.
 	function CheckpointProfile.new()
 		local self = setmetatable({}, CheckpointProfile)
-		self.store = ProfileStore.New("CheckpointProgress", {
+		self.store = ProfileStore.New(DataStoreConfig.Stores.CheckpointProgress, {
 			bestTime = nil,
 			peakIndex = 0,
 			summitCount = 0,
@@ -412,7 +413,7 @@ do
 	---@return any result Hasil dari fungsi `new`.
 	function PlaytimeProfile.new(storeKey)
 		local self = setmetatable({}, PlaytimeProfile)
-		self.store = ProfileStore.New(storeKey or "PlaytimeData", {
+		self.store = ProfileStore.New(storeKey or DataStoreConfig.Stores.PlaytimeData, {
 			totalSeconds = 0,
 		})
 		self.profiles = {}
@@ -512,7 +513,7 @@ do
 	---@return any result Hasil dari fungsi `new`.
 	function ShopProfile.new(storeKey)
 		local self = setmetatable({}, ShopProfile)
-		self.store = ProfileStore.New(storeKey or "ShopToolsData", {
+		self.store = ProfileStore.New(storeKey or DataStoreConfig.Stores.ShopToolsData, {
 			ownedTools = {},
 		})
 		self.profiles = {}
@@ -657,7 +658,7 @@ do
 	---@return any result Hasil dari fungsi `new`.
 	function SpeedrunProfile.new(storeKey)
 		local self = setmetatable({}, SpeedrunProfile)
-		self.store = ProfileStore.New(storeKey or "SpeedrunData", {
+		self.store = ProfileStore.New(storeKey or DataStoreConfig.Stores.SpeedrunData, {
 			bestTime = nil,
 		})
 		self.profiles = {}
@@ -771,7 +772,7 @@ do
 	---@return any result Hasil dari fungsi `new`.
 	function VipProfile.new()
 		local self = setmetatable({}, VipProfile)
-		self.store = ProfileStore.New("VipData", {
+		self.store = ProfileStore.New(DataStoreConfig.Stores.VipData, {
 			vip = false,
 		})
 		self.profiles = {}
@@ -1562,7 +1563,7 @@ do
 	---@param payload any Nilai parameter `payload`.
 	---@param scope any Nilai parameter `scope`.
 	function Announce.broadcast(service, payload, scope)
-		local resolvedScope = tonumber(scope or payload.scope or "Server")
+		local resolvedScope = scope or payload.scope or "Server"
 
 		if resolvedScope == "Global" then
 			local ok = pcall(function()
@@ -6736,23 +6737,23 @@ do
 
 		if self._filterUtil and self._filterUtil.isExemptFromLeaderboard then
 			if self._filterUtil.isExemptFromLeaderboard(userId, nil, self._overheadConfig) then
-				pcall(function()
+				DataStoreConfig.RetryCall(function()
 					self._board:RemoveAsync(tostring(userId))
-				end)
+				end, "Leaderboard:RemoveAsync")
 				return
 			end
 		elseif self._filterUtil and self._filterUtil.isPrivileged then 
 			if self._filterUtil.isPrivileged(userId, username, self._overheadConfig)  then
-				pcall(function()
+				DataStoreConfig.RetryCall(function()
 					self._board:RemoveAsync(tostring(userId))
-				end)
+				end, "Leaderboard:RemoveAsync")
 				return
 			end
 		end
 		task.spawn(function()
-			pcall(function()
+			DataStoreConfig.RetryCall(function()
 				self._board:SetAsync(tostring(userId), summitCount or 0)
-			end)
+			end, "CheckpointLeaderboard:SetAsync")
 		end)
 	end
 
@@ -10465,22 +10466,22 @@ do
 		end
 		if self._filterUtil and self._filterUtil.isExemptFromLeaderboard then
 			if self._filterUtil.isExemptFromLeaderboard(userId, nil, self._overheadConfig) then
-				pcall(function()
+				DataStoreConfig.RetryCall(function()
 					self._board:RemoveAsync(tostring(userId))
-				end)
+				end, "Leaderboard:RemoveAsync")
 				return
 			end
 		elseif self._filterUtil and self._filterUtil.isPrivileged then 
 			if self._filterUtil.isPrivileged(userId, username, self._overheadConfig)  then
-				pcall(function()
+				DataStoreConfig.RetryCall(function()
 					self._board:RemoveAsync(tostring(userId))
-				end)
+				end, "Leaderboard:RemoveAsync")
 				return
 			end
 		end
-		pcall(function()
+		DataStoreConfig.RetryCall(function()
 			self._board:SetAsync(tostring(userId), -elapsedSeconds)
-		end)
+		end, "SpeedrunLeaderboard:SetAsync")
 	end
 
 	---Menjalankan fungsi `remove`.
@@ -12874,15 +12875,15 @@ do
 			startedAt = 0,
 			endsAt = 0,
 		}
-		self._jailStore = ProfileStore.New("AdminJailProfiles", {
+		self._jailStore = ProfileStore.New(DataStoreConfig.Stores.AdminJailProfiles, {
 			isJailed = false,
 			pos = nil,
 		})
 
-		self._banStore = ProfileStore.New(AdminConfig.BanDataStoreKey or "AdminBans", {
+		self._banStore = ProfileStore.New(AdminConfig.BanDataStoreKey or DataStoreConfig.Stores.AdminBans, {
 			banned = false,
 		})
-		self._roleStore = ProfileStore.New(AdminConfig.RoleDataStoreKey or "AdminRoles", {
+		self._roleStore = ProfileStore.New(AdminConfig.RoleDataStoreKey or DataStoreConfig.Stores.AdminRoles, {
 			role = "Member",
 		})
 		self._utils = AdminUtils
@@ -13453,7 +13454,21 @@ do
 	---@param player any Nilai parameter `player`.
 	---@param targetPart any Nilai parameter `targetPart`.
 	function CarryService:TeleportCarryGroup(player, targetPart)
-		if not player or not targetPart or not self._flow then return false end
+		if not player or not targetPart then return false end
+
+		-- Prefer the standalone Carry state used by the client.
+		local carryFolder = ServerScriptService:FindFirstChild("Carry")
+		local carryModules = carryFolder and carryFolder:FindFirstChild("Modules")
+		local teleportModule = carryModules and carryModules:FindFirstChild("Teleport")
+		if teleportModule then
+			local ok, standalone = pcall(require, teleportModule)
+			if ok and standalone then
+				local handledOk, handled = pcall(standalone.TeleportCarryGroup, player, targetPart)
+				if handledOk and handled then return true end
+			end
+		end
+
+		if not self._flow then return false end
 
 		local carrier = self._flow.state.carriedByTarget[player.UserId] or player
 		local carrying = self._flow.state.carryingByCarrier[carrier.UserId]
@@ -14000,9 +14015,6 @@ do
 	function DonationsService:KnitInit()
 		self._janitor = Janitor.new()
 		local storeName = DonationsConfig.DataStoreName
-		if RunService:IsStudio() then
-			storeName = storeName .. "_Studio"
-		end
 		self._store = DataStoreService:GetOrderedDataStore(storeName)
 		self._priceCache = {}
 		self._profileCache = DonationsProfileCache.new()
@@ -14320,7 +14332,7 @@ do
 		self._resolvedConfig = ConfigProvider.build(OverheadConfig)
 		self.Client.Config:Set(ConfigProvider.build(OverheadConfig))
 
-		self.store = ProfileStore.New("OverheadCustomTitles", {
+		self.store = ProfileStore.New(DataStoreConfig.Stores.OverheadCustomTitles, {
 			customTitles = {},
 			activeSlot = 1,
 		})
@@ -14683,13 +14695,13 @@ do
 			end
 
 			if isExempt then 
-				pcall(function()
+				DataStoreConfig.RetryCall(function()
 					self._board:RemoveAsync(tostring(player.UserId))
-				end)
+				end, "PlaytimeLeaderboard:RemoveAsync")
 			else 
-				pcall(function()
+				DataStoreConfig.RetryCall(function()
 					self._board:SetAsync(tostring(player.UserId), total)
-				end)
+				end, "PlaytimeLeaderboard:SetAsync")
 			end
 		end
 		self._sessionStart[player] = os.clock()

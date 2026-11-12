@@ -1,5 +1,8 @@
 --!nonstrict
-local AntiCheatConfig = require(game:GetService("ServerScriptService"):WaitForChild("Configs"):WaitForChild("AntiCheatConfig"))
+local ServerScriptService = game:GetService("ServerScriptService")
+local Configs = ServerScriptService:WaitForChild("Configs")
+local AntiCheatConfig = require(Configs:WaitForChild("AntiCheatConfig"))
+local DataStoreConfig = require(Configs:WaitForChild("DataStoreConfig"))
 
 return {
     FolderPath = {"JaleMaps", "Speedrun"},
@@ -10,8 +13,8 @@ return {
     MinTimeSeconds = AntiCheatConfig.Speedrun.MinTimeSeconds,
     KickMessage = AntiCheatConfig.Speedrun.KickMessage,
 
-    ProfileKey = "SpeedrunData",
-    BestTimeLeaderboardKey = "SpeedrunBestTimeLeaderboard_V1",
+    ProfileKey = DataStoreConfig.Stores.SpeedrunData,
+    BestTimeLeaderboardKey = DataStoreConfig.Leaderboards.SpeedrunBestTime,
 
     StartCooldown = 2,
     FinishCooldown = 3,

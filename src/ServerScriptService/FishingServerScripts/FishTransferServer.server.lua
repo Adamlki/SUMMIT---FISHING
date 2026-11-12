@@ -11,6 +11,7 @@ local FishingSystem = ReplicatedStorage:WaitForChild("FishingSystem")
 local DataManager = require(FishingSystem:WaitForChild("FishingModules"):WaitForChild("DataManager"))
 local FishingConfig = require(FishingSystem:WaitForChild("FishingConfig"))
 local TransferSettings = FishingConfig.TransferSettings
+local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 
 local fishFolder = FishingSystem:WaitForChild("Assets"):WaitForChild("Fish")
 
@@ -42,7 +43,7 @@ end
 -- Remove fish tool from sender's inventory (FIXED VERSION)
 local function removeFishTool(player, fishId)
 	local character = player.Character
-	local backpack = player:WaitForChild("Backpack")
+	local backpack = player:FindFirstChild("Backpack")
 	local humanoid = character and character:FindFirstChild("Humanoid")
 
 	-- Check in character (currently equipped)
@@ -61,10 +62,12 @@ local function removeFishTool(player, fishId)
 	end
 
 	-- Check in backpack
-	for _, tool in pairs(backpack:GetChildren()) do
-		if tool:IsA("Tool") and tool:FindFirstChild("FishId") and tool.FishId.Value == fishId then
-			tool:Destroy()
-			return true
+	if backpack then
+		for _, tool in pairs(backpack:GetChildren()) do
+			if tool:IsA("Tool") and tool:FindFirstChild("FishId") and tool.FishId.Value == fishId then
+				tool:Destroy()
+				return true
+			end
 		end
 	end
 
@@ -77,12 +80,17 @@ end
 -- The data entry is added separately via DataManager:AddExistingFish()
 local function giveFishTool(player, fishData)
 	local fishTemplate = fishFolder:FindFirstChild(fishData.name)
-	if not fishTemplate then
-		warn("[TransferServer] Cannot find fish template: " .. fishData.name)
+	if not fishTemplate or not fishTemplate:IsA("Tool") then
+		warn("[TransferServer] Cannot find fish template: " .. tostring(fishData.name))
 		return false
 	end
 
-	local backpack = player:WaitForChild("Backpack")
+	local backpack = player:FindFirstChild("Backpack")
+	if not backpack then
+		warn("[TransferServer] Backpack missing for " .. player.Name)
+		return false
+	end
+
 	local clonedFish = fishTemplate:Clone()
 	clonedFish.ToolTip = " " -- Disable tooltip
 
@@ -115,21 +123,32 @@ end
 -- ===================================================================
 
 -- Step 1: Sender sends request
-TransferRequest.OnServerEvent:Connect(function(senderPlayer, targetPlayer, fishId)
-	if typeof(targetPlayer) ~= "Instance" or not targetPlayer:IsA("Player") then return end
-	if type(fishId) ~= "string" then return end
-	if targetPlayer == senderPlayer then return end
+local function handleTransferRequest(senderPlayer, targetPlayer, fishId)
+	print(string.format("[Transfer] request | sender=%s | target=%s | fish=%s",
+		tostring(senderPlayer and senderPlayer.Name), tostring(targetPlayer and targetPlayer.Name), tostring(fishId)))
+
+	if typeof(targetPlayer) ~= "Instance" or not targetPlayer:IsA("Player") then
+		return false, 400, "Target player is invalid."
+	end
+	if type(fishId) ~= "string" or fishId == "" then
+		return false, 400, "FishId is invalid."
+	end
+	if targetPlayer == senderPlayer then
+		return false, 400, "You cannot transfer a fish to yourself."
+	end
 
 	local now = os.clock()
 	if lastTransferRequest[senderPlayer] and now - lastTransferRequest[senderPlayer] < 3 then
-		notify(senderPlayer, "Please wait a moment before sending another transfer.", 3, Color3.fromRGB(255, 200, 100))
-		return
+		local msg = "Please wait a moment before sending another transfer."
+		notify(senderPlayer, msg, 3, Color3.fromRGB(255, 200, 100))
+		return false, 429, msg
 	end
 	lastTransferRequest[senderPlayer] = now
 
 	if not TransferSettings.Enabled then
-		notify(senderPlayer, "Transfer system is currently disabled.", 3, Color3.fromRGB(255, 100, 100))
-		return
+		local msg = "Transfer system is currently disabled."
+		notify(senderPlayer, msg, 3, Color3.fromRGB(255, 100, 100))
+		return false, 403, msg
 	end
 
 	-- Validation 1: Check Level
@@ -151,13 +170,17 @@ TransferRequest.OnServerEvent:Connect(function(senderPlayer, targetPlayer, fishI
 	local senderChar = senderPlayer.Character
 	local receiverChar = targetPlayer.Character
 	if not senderChar or not receiverChar or not senderChar:FindFirstChild("HumanoidRootPart") or not receiverChar:FindFirstChild("HumanoidRootPart") then
-		return -- One of the players is invalid
+		local msg = "Both players must have a character."
+		notify(senderPlayer, msg, 3, Color3.fromRGB(255, 100, 100))
+		return false, 400, msg
 	end
 
 	local distance = (senderChar.HumanoidRootPart.Position - receiverChar.HumanoidRootPart.Position).Magnitude
+	print(string.format("[Transfer] distance | %s -> %s | %.1f studs", senderPlayer.Name, targetPlayer.Name, distance))
 	if distance > TransferSettings.MaxDistance + 5 then -- Give slight tolerance
-		notify(senderPlayer, targetPlayer.Name .. " is too far away.", 3, Color3.fromRGB(255, 100, 100))
-		return
+		local msg = targetPlayer.Name .. " is too far away."
+		notify(senderPlayer, msg, 3, Color3.fromRGB(255, 100, 100))
+		return false, 400, msg
 	end
 
 	-- Validation 3: Check if sender actually has the fish
@@ -171,8 +194,24 @@ TransferRequest.OnServerEvent:Connect(function(senderPlayer, targetPlayer, fishI
 	end
 
 	if not fishData then
-		notify(senderPlayer, "Fish not found in your inventory.", 3, Color3.fromRGB(255, 100, 100))
-		return
+		local msg = "Fish not found in your inventory."
+		warn(("[Transfer] fish not found | sender=%s | fishId=%s | owned=%d"):format(
+			senderPlayer.Name, tostring(fishId), #allFish
+		))
+		notify(senderPlayer, msg, 3, Color3.fromRGB(255, 100, 100))
+		return false, 404, msg
+	end
+
+	if fishData.isFavorited == true then
+		local msg = "Ikan favorit tidak bisa ditransfer. Hapus favorit dulu."
+		notify(senderPlayer, msg, 4, Color3.fromRGB(255, 100, 100))
+		return false, 400, msg
+	end
+
+	if DataManager:IsInventoryFull(targetPlayer) then
+		local msg = targetPlayer.Name .. "'s inventory is full."
+		notify(senderPlayer, msg, 3, Color3.fromRGB(255, 100, 100))
+		return false, 400, msg
 	end
 
 	-- INITIAL VALIDATION SUCCESS --
@@ -187,6 +226,8 @@ TransferRequest.OnServerEvent:Connect(function(senderPlayer, targetPlayer, fishI
 
 	-- Step 2: Send prompt to receiver
 	TransferPrompt:FireClient(targetPlayer, senderPlayer, fishData.name, fishData.weight, transferId)
+	print(string.format("[Transfer] prompt sent | sender=%s | target=%s | fish=%s | id=%s",
+		senderPlayer.Name, targetPlayer.Name, tostring(fishData.name), tostring(transferId)))
 
 	-- Remove transfer if timeout
 	task.delay(TRANSFER_TIMEOUT, function()
@@ -196,21 +237,23 @@ TransferRequest.OnServerEvent:Connect(function(senderPlayer, targetPlayer, fishI
 			activeTransfers[transferId] = nil
 		end
 	end)
-end)
+
+	return true, 200, "Transfer requested."
+end
 
 
 -- Step 3: Receiver responds (Yes/No)
-TransferResponse.OnServerEvent:Connect(function(receiverPlayer, transferId, didAccept)
+local function handleTransferResponse(receiverPlayer, transferId, didAccept)
 
 	-- Validation 1: Check if transfer exists
 	local transferData = activeTransfers[transferId]
 	if not transferData then
-		return -- Transfer already expired or invalid
+		return false, 404, "Transfer sudah kedaluwarsa atau tidak ditemukan."
 	end
 
 	-- Validation 2: Check if this player is the legitimate receiver
 	if transferData.receiver ~= receiverPlayer then
-		return -- This player is trying to respond to someone else's transfer
+		return false, 403, "Kamu bukan penerima transfer ini."
 	end
 
 	local senderPlayer = transferData.sender
@@ -223,26 +266,28 @@ TransferResponse.OnServerEvent:Connect(function(receiverPlayer, transferId, didA
 	if not didAccept then
 		notify(senderPlayer, receiverPlayer.Name .. " declined the transfer.", 3, Color3.fromRGB(255, 200, 100))
 		notify(receiverPlayer, "Transfer cancelled.", 3)
-		return
+		return true, 200, "Transfer declined."
 	end
 
 	-- CASE 2: RECEIVER ACCEPTED
 
 	-- Validation 3: Check if receiver's inventory is full
 	if DataManager:IsInventoryFull(receiverPlayer) then
+		local msg = "Transfer failed, your inventory is full!"
 		notify(senderPlayer, string.format("%s's inventory is full!", receiverPlayer.Name), 3, Color3.fromRGB(255, 100, 100))
-		notify(receiverPlayer, "Transfer failed, your inventory is full!", 3, Color3.fromRGB(255, 100, 100))
-		return
+		notify(receiverPlayer, msg, 3, Color3.fromRGB(255, 100, 100))
+		return false, 400, msg
 	end
 
 	-- Validation 4: Double-check if sender STILL has the fish (important!)
 	local success, removedFishData = DataManager:RemoveFish(senderPlayer, fishData.uniqueId)
 
 	if not success or not removedFishData then
-		-- Sender may have already sold/transferred this fish
-		notify(senderPlayer, "Transfer failed, fish no longer in your inventory.", 3, Color3.fromRGB(255, 100, 100))
-		notify(receiverPlayer, "Transfer failed, sender no longer has the fish.", 3, Color3.fromRGB(255, 100, 100))
-		return
+		-- Sender may have already sold/transferred this fish, or favorited it.
+		local msg = "Transfer failed, fish no longer available in sender's inventory."
+		notify(senderPlayer, "Transfer failed, fish no longer in your inventory (atau sedang favorit).", 4, Color3.fromRGB(255, 100, 100))
+		notify(receiverPlayer, msg, 3, Color3.fromRGB(255, 100, 100))
+		return false, 400, msg
 	end
 
 	-- Validation 5: Remove the physical tool if it exists.
@@ -260,13 +305,24 @@ TransferResponse.OnServerEvent:Connect(function(receiverPlayer, transferId, didA
 		DataManager:AddExistingFish(senderPlayer, removedFishData)
 		giveFishTool(senderPlayer, removedFishData) -- Give tool back
 
+		local msg = "Transfer failed, receiver inventory is full."
 		notify(senderPlayer, string.format("%s's inventory is full! Transfer cancelled.", receiverPlayer.Name), 3, Color3.fromRGB(255, 100, 100))
 		notify(receiverPlayer, "Transfer failed, your inventory is full!", 3, Color3.fromRGB(255, 100, 100))
-		return
+		return false, 400, msg
 	end
 
 	-- 2. Give new fish tool to receiver
-	giveFishTool(receiverPlayer, removedFishData)
+	local toolOk = giveFishTool(receiverPlayer, removedFishData)
+	if not toolOk then
+		-- Data already moved; undo it so the sender does not lose a data-only fish.
+		DataManager:RemoveFish(receiverPlayer, removedFishData.uniqueId)
+		DataManager:AddExistingFish(senderPlayer, removedFishData)
+		giveFishTool(senderPlayer, removedFishData)
+		local msg = "Transfer failed: fish template is missing. Fish returned to sender."
+		notify(senderPlayer, msg, 4, Color3.fromRGB(255, 100, 100))
+		notify(receiverPlayer, "Transfer failed: fish template is missing.", 4, Color3.fromRGB(255, 100, 100))
+		return false, 500, msg
+	end
 
 	-- 3. Send success notifications to both players
 	local successMsg = string.format("Successfully gave %s (%.1fkg) to %s.", fishData.name, fishData.weight, receiverPlayer.Name)
@@ -274,4 +330,79 @@ TransferResponse.OnServerEvent:Connect(function(receiverPlayer, transferId, didA
 
 	local receivedMsg = string.format("Successfully received %s (%.1fkg) from %s.", fishData.name, fishData.weight, senderPlayer.Name)
 	notify(receiverPlayer, receivedMsg, 3, Color3.fromRGB(100, 255, 100))
+
+	-- Tell both clients to refresh their inventory/hotbar immediately.
+	senderPlayer:SetAttribute("InventoryVersion", os.clock())
+	receiverPlayer:SetAttribute("InventoryVersion", os.clock())
+
+	return true, 200, "Transfer complete."
+end
+
+TransferRequest.OnServerEvent:Connect(function(senderPlayer, targetPlayer, fishId)
+	NetworkGateway:RunLegacy(senderPlayer, "transferRequest", function()
+		handleTransferRequest(senderPlayer, targetPlayer, fishId)
+	end, 0)
 end)
+
+TransferResponse.OnServerEvent:Connect(function(receiverPlayer, transferId, didAccept)
+	NetworkGateway:RunLegacy(receiverPlayer, "transferResponse", function()
+		handleTransferResponse(receiverPlayer, transferId, didAccept)
+	end, 0.25)
+end)
+
+NetworkGateway:RegisterRoute("POST", "/transfer/request", function(player, payload)
+	if type(payload) ~= "table" or type(payload.FishId) ~= "string" or type(payload.TargetUserId) ~= "number" then
+		return {
+			Success = false,
+			StatusCode = 400,
+			ErrorCode = "INVALID_PAYLOAD",
+			Message = "TargetUserId and FishId are required.",
+		}
+	end
+
+	local targetPlayer = Players:GetPlayerByUserId(payload.TargetUserId)
+	if not targetPlayer then
+		notify(player, "Target player not found.", 3, Color3.fromRGB(255, 100, 100))
+		return {
+			Success = false,
+			StatusCode = 404,
+			ErrorCode = "PLAYER_NOT_FOUND",
+			Message = "Target player not found.",
+		}
+	end
+
+	local ok, status, message = handleTransferRequest(player, targetPlayer, payload.FishId)
+	if not ok then
+		warn(("[Transfer] request rejected | sender=%s | target=%s | status=%s | %s"):format(
+			player.Name, targetPlayer.Name, tostring(status), tostring(message)
+		))
+	end
+	return {
+		Success = ok,
+		StatusCode = status,
+		Message = message,
+	}
+end, { rateLimitSeconds = 0 })
+
+NetworkGateway:RegisterRoute("POST", "/transfer/respond", function(player, payload)
+	if type(payload) ~= "table" or type(payload.TransferId) ~= "string" or type(payload.Accept) ~= "boolean" then
+		return {
+			Success = false,
+			StatusCode = 400,
+			ErrorCode = "INVALID_PAYLOAD",
+			Message = "TransferId and Accept are required.",
+		}
+	end
+
+	local ok, status, message = handleTransferResponse(player, payload.TransferId, payload.Accept)
+	if not ok then
+		warn(("[Transfer] response rejected | receiver=%s | status=%s | %s"):format(
+			player.Name, tostring(status), tostring(message)
+		))
+	end
+	return {
+		Success = ok,
+		StatusCode = status,
+		Message = message,
+	}
+end, { rateLimitSeconds = 0.25 })

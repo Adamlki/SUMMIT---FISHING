@@ -13,13 +13,14 @@ local ServerLuckManager = require(ServerScriptService.FishingServerScripts.Serve
 -- Initialize Server Luck countdown timer if active
 ServerLuckManager.Init()
 
--- Apply Gamepass Perks to a Player
-local function applyGamepassPerks(player: Player, gpId: string)
-    if gpId == "VIP" then
+-- Apply Gamepass Perks to a Player. Accept both config keys and legacy perk names.
+local function applyGamepassPerks(player: Player, passKey: string)
+    if passKey == "VIP" then
         player:SetAttribute("VIP", true)
         player:SetAttribute("IsVIP", true)
         player:SetAttribute("VIPLuckBoost", 5.0) -- +500% permanent luck boost
-    elseif gpId == "SellAnywhere" then
+    elseif passKey == "RemoteSell" or passKey == "SellAnywhere" then
+        player:SetAttribute("RemoteSell", true)
         player:SetAttribute("CanSellAnywhere", true)
         player:SetAttribute("HasRemoteSell", true)
         task.spawn(function()
@@ -31,14 +32,15 @@ local function applyGamepassPerks(player: Player, gpId: string)
                 GameProfileService:SetRemoteSell(player, true)
             end
         end)
-    elseif gpId == "Mutations" then
+    elseif passKey == "MoreMutations" or passKey == "Mutations" then
+        player:SetAttribute("MoreMutations", true)
         player:SetAttribute("HasMutationsPass", true)
-    elseif gpId == "SmallLuck" then
-        player:SetAttribute("SmallLuckBoost", 3.0) -- +300% permanent luck boost
-    elseif gpId == "AdvancedLuck" then
-        player:SetAttribute("AdvancedLuckBoost", 10.0) -- +1000% permanent luck boost
-    elseif gpId == "ExtraLuck" then
-        player:SetAttribute("ExtraLuckBoost", 15.0) -- +1500% permanent luck boost
+    elseif passKey == "SmallLuck" then
+        player:SetAttribute("SmallLuck", true)
+    elseif passKey == "ExtraLuck" then
+        player:SetAttribute("ExtraLuck", true)
+    elseif passKey == "EdvancedLuck" or passKey == "AdvancedLuck" then
+        player:SetAttribute("EdvancedLuck", true)
     end
 end
 
@@ -47,13 +49,13 @@ MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player: Playe
     if not wasPurchased then return end
 
     if StoreConfig and StoreConfig.Gamepasses then
-        for _, gp in ipairs(StoreConfig.Gamepasses) do
-            if gp.GamePassId == gamePassId then
-                applyGamepassPerks(player, gp.Id)
+        for passKey, gp in pairs(StoreConfig.Gamepasses) do
+            if type(gp) == "table" and gp.PassId == gamePassId then
+                applyGamepassPerks(player, passKey)
 
                 local showNotif = FishingSystem:FindFirstChild("ShowNotification")
                 if showNotif then
-                    showNotif:FireClient(player, "🎉 Selamat! Kamu telah memiliki " .. gp.Title .. "!", 4, Color3.fromRGB(100, 255, 140))
+                    showNotif:FireClient(player, "🎉 Selamat! Kamu telah memiliki " .. (gp.Title or passKey) .. "!", 4, Color3.fromRGB(100, 255, 140))
                 end
                 break
             end
@@ -67,44 +69,24 @@ local RoleConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("Sh
 local function applyOwnerAllPerks(player: Player)
     if not RoleConfig.IsOwner(player) then return end
     print("👑 [ExclusiveStoreServer] Granting ALL Shop & Gamepass Perks to Owner: " .. player.Name)
-    applyGamepassPerks(player, "VIP")
-    applyGamepassPerks(player, "SellAnywhere")
-    task.spawn(function()
-        local GameProfileService = nil
-        pcall(function()
-            GameProfileService = require(ServerScriptService:WaitForChild("Data"):WaitForChild("PetCore"):WaitForChild("FishData"))
-        end)
-        if GameProfileService then
-            GameProfileService:SetRemoteSell(player, true)
-        end
-    end)
-    applyGamepassPerks(player, "Mutations")
-    applyGamepassPerks(player, "SmallLuck")
-    applyGamepassPerks(player, "ExtraLuck")
-    applyGamepassPerks(player, "AdvancedLuck")
-    player:SetAttribute("VIP", true)
-    player:SetAttribute("IsVIP", true)
-    player:SetAttribute("SmallLuck", true)
-    player:SetAttribute("ExtraLuck", true)
-    player:SetAttribute("EdvancedLuck", true)
-    player:SetAttribute("MoreMutations", true)
-    player:SetAttribute("HasMutationsPass", true)
-    player:SetAttribute("RemoteSell", true)
-    player:SetAttribute("HasRemoteSell", true)
-    player:SetAttribute("CanSellAnywhere", true)
+    for _, passKey in ipairs({ "VIP", "RemoteSell", "MoreMutations", "SmallLuck", "ExtraLuck", "EdvancedLuck" }) do
+        applyGamepassPerks(player, passKey)
+    end
 end
 
 Players.PlayerAdded:Connect(function(player: Player)
     applyOwnerAllPerks(player)
     if StoreConfig and StoreConfig.Gamepasses then
-        for _, gp in ipairs(StoreConfig.Gamepasses) do
-            if gp.GamePassId and gp.GamePassId > 0 then
+        for passKey, gp in pairs(StoreConfig.Gamepasses) do
+            if type(gp) == "table" and type(gp.PassId) == "number" and gp.PassId > 0 then
+                local passId = gp.PassId
+                local perkKey = passKey
                 task.spawn(function()
                     local ok, owns = pcall(function()
-                        return MarketplaceService:UserOwnsGamePassAsync(player.UserId, gp.GamePassId)
+                        return MarketplaceService:UserOwnsGamePassAsync(player.UserId, passId)
                     end)
-                    if ok and owns then
-                        applyGamepassPerks(player, gp.Id)
+                    if ok and owns and player.Parent then
+                        applyGamepassPerks(player, perkKey)
                     end
                 end)
             end

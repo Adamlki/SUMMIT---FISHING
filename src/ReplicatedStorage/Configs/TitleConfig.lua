@@ -1,6 +1,8 @@
 --!strict
 -- Konfigurasi Terpusat untuk Title Gambar, Kuota Teks & Syarat Unlock Slot
 
+local MonetizationConfig = require(script.Parent:WaitForChild("MonetizationConfig"))
+
 export type UnlockType = "Group" | "Summit" | "FishCount" | "FishIndex" | "VIP" | "Free"
 
 export type ImageTitleEntry = {
@@ -102,7 +104,7 @@ ImageTitleConfig.ImageTitles = {
 		Name = "VIP CROWN",
 		ImageId = "rbxassetid://12916400638",
 		UnlockType = "VIP",
-		GamepassId = 1874479701,
+		GamepassId = MonetizationConfig.VIP.GamePassId,
 		Description = "Miliki Gamepass VIP",
 	},
 }

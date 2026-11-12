@@ -11,7 +11,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local localPlayer = Players.LocalPlayer
 
-local syncSessionRemote = ReplicatedStorage:WaitForChild("FishingSystem"):WaitForChild("SyncSessionState")
+local NetworkGateway = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("Network"):WaitForChild("NetworkGateway"))
 
 -- ===================================================================
 -- 0. AWAY TRACKER (lapor status AFK ke server)
@@ -25,7 +25,7 @@ local lastInputTime = os.clock()
 
 local function pushAwayState()
 	pcall(function()
-		syncSessionRemote:FireServer({ Away = isAway })
+		NetworkGateway:Request("PUT", "/afk/sync", { Away = isAway })
 	end)
 end
 

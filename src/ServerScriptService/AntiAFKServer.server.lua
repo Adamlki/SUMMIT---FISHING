@@ -28,7 +28,7 @@ function AntiAFKService.new()
 end
 
 function AntiAFKService:SaveSnapshot(player)
-	if not player or not player.Parent then return end
+	if not player then return end
 	local character = player.Character
 	if not character then return end
 	local hrp = character:FindFirstChild("HumanoidRootPart")
@@ -163,7 +163,9 @@ function AntiAFKService:Start()
 	self._running = true
 
 	syncSessionRemote.OnServerEvent:Connect(function(player, data)
-		self:SyncSessionData(player, data)
+		NetworkGateway:RunLegacy(player, "syncSession", function()
+			self:SyncSessionData(player, data)
+		end, 0.5)
 	end)
 
 	Players.PlayerAdded:Connect(function(player)
@@ -185,6 +187,9 @@ function AntiAFKService:Start()
 end
 
 local service = AntiAFKService.new()
+FishData:RegisterBeforeRelease(function(player)
+	service:SaveSnapshot(player)
+end)
 service:Start()
 
 -- ===================================================================
@@ -192,7 +197,15 @@ service:Start()
 -- ===================================================================
 
 NetworkGateway:RegisterRoute("PUT", "/afk/sync", function(player, payload)
-	if type(payload) ~= "table" or type(payload.Away) ~= "boolean" then
+	if type(payload) ~= "table" then
+		return {
+			Success = false,
+			StatusCode = 400,
+			ErrorCode = "INVALID_PAYLOAD",
+			Message = "Payload must be a table.",
+		}
+	end
+	if payload.Away ~= nil and type(payload.Away) ~= "boolean" then
 		return {
 			Success = false,
 			StatusCode = 400,
@@ -200,14 +213,46 @@ NetworkGateway:RegisterRoute("PUT", "/afk/sync", function(player, payload)
 			Message = "Away must be a boolean.",
 		}
 	end
+	if payload.Action ~= nil and type(payload.Action) ~= "string" then
+		return {
+			Success = false,
+			StatusCode = 400,
+			ErrorCode = "INVALID_PAYLOAD",
+			Message = "Action must be a string.",
+		}
+	end
+	if payload.RodName ~= nil and type(payload.RodName) ~= "string" then
+		return {
+			Success = false,
+			StatusCode = 400,
+			ErrorCode = "INVALID_PAYLOAD",
+			Message = "RodName must be a string.",
+		}
+	end
+	if payload.IsAutoFishing ~= nil and type(payload.IsAutoFishing) ~= "boolean" then
+		return {
+			Success = false,
+			StatusCode = 400,
+			ErrorCode = "INVALID_PAYLOAD",
+			Message = "IsAutoFishing must be a boolean.",
+		}
+	end
+	if payload.Away == nil and payload.Action == nil and payload.RodName == nil and payload.IsAutoFishing == nil then
+		return {
+			Success = false,
+			StatusCode = 400,
+			ErrorCode = "INVALID_PAYLOAD",
+			Message = "At least one session field is required.",
+		}
+	end
 
-	service:SyncSessionData(player, { Away = payload.Away })
+	service:SyncSessionData(player, payload)
 
 	return {
 		Success = true,
 		StatusCode = 200,
-		Data = { Away = payload.Away },
-		Message = "AFK state synced.",
+		Data = payload,
+		Message = "Session state synced.",
 	}
 end, { rateLimitSeconds = 0.5 })
 

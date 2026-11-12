@@ -3,6 +3,8 @@
 -- Edit this file directly to adjust item names, tiers, coin/robux prices, and stats.
 -- All UI labels and server purchase validation automatically consume this module.
 
+local MonetizationConfig = require(script.Parent:WaitForChild("MonetizationConfig"))
+
 export type RodMasterInfo = {
 	Name: string,
 	Tier: string,
@@ -41,11 +43,11 @@ local ShopMasterConfig = {
 			MaxPurchases = 5,
 			DurationSeconds = 1800, -- 30 minutes
 			Tiers = {
-				[1] = { Multiplier = 2, Display = "X30 > X60", RobuxPrice = 50, ProductId = 0 },
-				[2] = { Multiplier = 4, Display = "X60 > X120", RobuxPrice = 100, ProductId = 0 },
-				[3] = { Multiplier = 8, Display = "X120 > X240", RobuxPrice = 200, ProductId = 0 },
-				[4] = { Multiplier = 16, Display = "X240 > X480", RobuxPrice = 400, ProductId = 0 },
-				[5] = { Multiplier = 32, Display = "X480 > X960", RobuxPrice = 800, ProductId = 0 },
+				[1] = { Multiplier = 2, Display = "X30 > X60", RobuxPrice = 50, ProductId = MonetizationConfig.ServerLuckBoost.ProductIds[1] },
+				[2] = { Multiplier = 4, Display = "X60 > X120", RobuxPrice = 100, ProductId = MonetizationConfig.ServerLuckBoost.ProductIds[2] },
+				[3] = { Multiplier = 8, Display = "X120 > X240", RobuxPrice = 200, ProductId = MonetizationConfig.ServerLuckBoost.ProductIds[3] },
+				[4] = { Multiplier = 16, Display = "X240 > X480", RobuxPrice = 400, ProductId = MonetizationConfig.ServerLuckBoost.ProductIds[4] },
+				[5] = { Multiplier = 32, Display = "X480 > X960", RobuxPrice = 800, ProductId = MonetizationConfig.ServerLuckBoost.ProductIds[5] },
 			}
 		},
 
@@ -56,7 +58,7 @@ local ShopMasterConfig = {
 				Title = "Edvanced Luck",
 				Subtitle = "+150% Luck",
 				RobuxPrice = 199,
-				PassId = 1874483756,
+				PassId = MonetizationConfig.LuckPasses.EdvancedLuck,
 				BoostPercent = 150,
 			},
 			["ExtraLuck"] = {
@@ -64,7 +66,7 @@ local ShopMasterConfig = {
 				Title = "Extra Luck",
 				Subtitle = "+50% Luck",
 				RobuxPrice = 99,
-				PassId = 1874483757,
+				PassId = MonetizationConfig.LuckPasses.ExtraLuck,
 				BoostPercent = 50,
 			},
 			["SmallLuck"] = {
@@ -72,7 +74,7 @@ local ShopMasterConfig = {
 				Title = "Small Luck",
 				Subtitle = "+30% Luck",
 				RobuxPrice = 49,
-				PassId = 1874483758,
+				PassId = MonetizationConfig.LuckPasses.SmallLuck,
 				BoostPercent = 30,
 			},
 			["MoreMutations"] = {
@@ -80,7 +82,7 @@ local ShopMasterConfig = {
 				Title = "More Mutations",
 				Subtitle = "+60% Mutations",
 				RobuxPrice = 149,
-				PassId = 1874483759,
+				PassId = MonetizationConfig.LuckPasses.MoreMutations,
 				BoostPercent = 60,
 			},
 		},
@@ -90,7 +92,7 @@ local ShopMasterConfig = {
 			Title = "Remote Sell",
 			Subtitle = "Sell all fish directly from your bag!",
 			RobuxPrice = 149,
-			PassId = 1874483760,
+			PassId = MonetizationConfig.RemoteSell.GamePassId,
 		},
 
 		-- Balanced Anti-Inflation Coin Packs (ListCoinFrame)
@@ -101,7 +103,7 @@ local ShopMasterConfig = {
 				Display = "+10.000 Coins",
 				Coins = 10000,
 				RobuxPrice = 25,
-				ProductId = 0,
+				ProductId = MonetizationConfig.CoinPacks.SmallCoin,
 			},
 			["MediumCoin"] = {
 				FrameName = "MediunCoinFrame",
@@ -109,7 +111,7 @@ local ShopMasterConfig = {
 				Display = "+50.000 Coins",
 				Coins = 50000,
 				RobuxPrice = 99,
-				ProductId = 0,
+				ProductId = MonetizationConfig.CoinPacks.MediumCoin,
 			},
 			["LargeCoin"] = {
 				FrameName = "LargeCoinFrame",
@@ -117,7 +119,7 @@ local ShopMasterConfig = {
 				Display = "+150.000 Coins",
 				Coins = 150000,
 				RobuxPrice = 249,
-				ProductId = 0,
+				ProductId = MonetizationConfig.CoinPacks.LargeCoin,
 			},
 			["ExtraLargeCoin"] = {
 				FrameName = "ExtraLargeCoinFrame",
@@ -125,7 +127,7 @@ local ShopMasterConfig = {
 				Display = "+500.000 Coins",
 				Coins = 500000,
 				RobuxPrice = 699,
-				ProductId = 0,
+				ProductId = MonetizationConfig.CoinPacks.ExtraLargeCoin,
 			},
 		},
 
@@ -133,7 +135,7 @@ local ShopMasterConfig = {
 		VIP = {
 			Title = "VIP Pack",
 			RobuxPrice = 499,
-			PassId = 1874479701,
+			PassId = MonetizationConfig.VIP.GamePassId,
 			Rewards = {
 				ChatTag = "[VIP]",
 				ChatTagColor = Color3.fromRGB(255, 200, 0),
@@ -170,12 +172,12 @@ local ShopMasterConfig = {
 		{ Name = "Copblue x1x1x", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), CoinPrice = 175000, RobuxPrice = 899, LuckPercent = 400, SpeedPercent = 85, MaxWeightKg = 2000, Type = "Currency", TextureId = "" },
 		{ Name = "Dragon Spine", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), CoinPrice = 185000, RobuxPrice = 899, LuckPercent = 420, SpeedPercent = 85, MaxWeightKg = 2200, Type = "Currency", TextureId = "rbxassetid://103247953194129" },
 		{ Name = "x1x1x1 Hammer", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), CoinPrice = 200000, RobuxPrice = 999, LuckPercent = 450, SpeedPercent = 80, MaxWeightKg = 2500, Type = "Currency", TextureId = "" },
-		{ Name = "Loving", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), CoinPrice = 250000, RobuxPrice = 399, LuckPercent = 250, SpeedPercent = 45, MaxWeightKg = 500, Type = "Gamepass", GamePassId = 1874483770, TextureId = "" },
-		{ Name = "Flery", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), CoinPrice = 250000, RobuxPrice = 399, LuckPercent = 250, SpeedPercent = 45, MaxWeightKg = 500, Type = "Gamepass", GamePassId = 1874483771, TextureId = "" },
-		{ Name = "ZombieRod", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), CoinPrice = 300000, RobuxPrice = 499, LuckPercent = 275, SpeedPercent = 45, MaxWeightKg = 750, Type = "Gamepass", GamePassId = 1874483772, TextureId = "" },
-		{ Name = "Crystalized", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), CoinPrice = 300000, RobuxPrice = 499, LuckPercent = 275, SpeedPercent = 45, MaxWeightKg = 750, Type = "Gamepass", GamePassId = 1874483773, TextureId = "" },
-		{ Name = "Forsaken", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), CoinPrice = 350000, RobuxPrice = 599, LuckPercent = 320, SpeedPercent = 45, MaxWeightKg = 1000, Type = "Gamepass", GamePassId = 1874483774, TextureId = "rbxassetid://116453364785174" },
-		{ Name = "Umbrella", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), CoinPrice = 400000, RobuxPrice = 699, LuckPercent = 350, SpeedPercent = 60, MaxWeightKg = 1200, Type = "Gamepass", GamePassId = 1874483775, TextureId = "rbxassetid://132455653641238" },
+		{ Name = "Loving", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), CoinPrice = 250000, RobuxPrice = 399, LuckPercent = 250, SpeedPercent = 45, MaxWeightKg = 500, Type = "Gamepass", GamePassId = MonetizationConfig.SecretRods.Loving, TextureId = "" },
+		{ Name = "Flery", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), CoinPrice = 250000, RobuxPrice = 399, LuckPercent = 250, SpeedPercent = 45, MaxWeightKg = 500, Type = "Gamepass", GamePassId = MonetizationConfig.SecretRods.Flery, TextureId = "" },
+		{ Name = "ZombieRod", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), CoinPrice = 300000, RobuxPrice = 499, LuckPercent = 275, SpeedPercent = 45, MaxWeightKg = 750, Type = "Gamepass", GamePassId = MonetizationConfig.SecretRods.ZombieRod, TextureId = "" },
+		{ Name = "Crystalized", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), CoinPrice = 300000, RobuxPrice = 499, LuckPercent = 275, SpeedPercent = 45, MaxWeightKg = 750, Type = "Gamepass", GamePassId = MonetizationConfig.SecretRods.Crystalized, TextureId = "" },
+		{ Name = "Forsaken", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), CoinPrice = 350000, RobuxPrice = 599, LuckPercent = 320, SpeedPercent = 45, MaxWeightKg = 1000, Type = "Gamepass", GamePassId = MonetizationConfig.SecretRods.Forsaken, TextureId = "rbxassetid://116453364785174" },
+		{ Name = "Umbrella", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), CoinPrice = 400000, RobuxPrice = 699, LuckPercent = 350, SpeedPercent = 60, MaxWeightKg = 1200, Type = "Gamepass", GamePassId = MonetizationConfig.SecretRods.Umbrella, TextureId = "rbxassetid://132455653641238" },
 		{ Name = "Gold Rod", Tier = "VIP", TierColor = Color3.fromRGB(255, 205, 50), CoinPrice = 0, RobuxPrice = 0, LuckPercent = 250, SpeedPercent = 50, MaxWeightKg = 500, Type = "VIP", TextureId = "rbxassetid://114471091895897" },
 	} :: { RodMasterInfo },
 
@@ -183,12 +185,12 @@ local ShopMasterConfig = {
 	-- 3. TRAILS STORE CONFIGURATION (6-Tier AssetTrails)
 	-- ===================================================================
 	Trails = {
-		{ Id = "GrayTrail", FrameName = "GrayTrailFrame", Name = "Gray Trail", Tier = "Common", TierColor = Color3.fromRGB(180, 185, 195), SpeedBonus = 2.5, CoinPrice = 1000, RobuxPrice = 25, PartName = "GreyTrail", ProductId = 0 },
-		{ Id = "GreenTrail", FrameName = "GreenTrailFrame", Name = "Green Trail", Tier = "Uncommon", TierColor = Color3.fromRGB(80, 255, 120), SpeedBonus = 5.0, CoinPrice = 5000, RobuxPrice = 49, PartName = "GreenTrail", ProductId = 0 },
-		{ Id = "BlueTrail", FrameName = "BlueTrailFrame", Name = "Blue Trail", Tier = "Rare", TierColor = Color3.fromRGB(60, 160, 255), SpeedBonus = 7.5, CoinPrice = 15000, RobuxPrice = 99, PartName = "BlueTrail", ProductId = 0 },
-		{ Id = "GoldTrail", FrameName = "GoldTrailFrame", Name = "Gold Trail", Tier = "Epic", TierColor = Color3.fromRGB(255, 205, 50), SpeedBonus = 12.5, CoinPrice = 35000, RobuxPrice = 199, PartName = "GoldenTrail", ProductId = 0 },
-		{ Id = "RedTrail", FrameName = "RedTrailFrame", Name = "Red Trail", Tier = "Legendary", TierColor = Color3.fromRGB(255, 75, 75), SpeedBonus = 15.0, CoinPrice = 75000, RobuxPrice = 349, PartName = "RedTrail", ProductId = 0 },
-		{ Id = "GalaxyTrail", FrameName = "GalaxyTrailFrame", Name = "Galaxy Trail", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), SpeedBonus = 20.0, CoinPrice = 150000, RobuxPrice = 599, PartName = "GalaxyTrail", ProductId = 0 },
+		{ Id = "GrayTrail", FrameName = "GrayTrailFrame", Name = "Gray Trail", Tier = "Common", TierColor = Color3.fromRGB(180, 185, 195), SpeedBonus = 2.5, CoinPrice = 1000, RobuxPrice = 25, PartName = "GreyTrail", ProductId = MonetizationConfig.Trails.GrayTrail },
+		{ Id = "GreenTrail", FrameName = "GreenTrailFrame", Name = "Green Trail", Tier = "Uncommon", TierColor = Color3.fromRGB(80, 255, 120), SpeedBonus = 5.0, CoinPrice = 5000, RobuxPrice = 49, PartName = "GreenTrail", ProductId = MonetizationConfig.Trails.GreenTrail },
+		{ Id = "BlueTrail", FrameName = "BlueTrailFrame", Name = "Blue Trail", Tier = "Rare", TierColor = Color3.fromRGB(60, 160, 255), SpeedBonus = 7.5, CoinPrice = 15000, RobuxPrice = 99, PartName = "BlueTrail", ProductId = MonetizationConfig.Trails.BlueTrail },
+		{ Id = "GoldTrail", FrameName = "GoldTrailFrame", Name = "Gold Trail", Tier = "Epic", TierColor = Color3.fromRGB(255, 205, 50), SpeedBonus = 12.5, CoinPrice = 35000, RobuxPrice = 199, PartName = "GoldenTrail", ProductId = MonetizationConfig.Trails.GoldTrail },
+		{ Id = "RedTrail", FrameName = "RedTrailFrame", Name = "Red Trail", Tier = "Legendary", TierColor = Color3.fromRGB(255, 75, 75), SpeedBonus = 15.0, CoinPrice = 75000, RobuxPrice = 349, PartName = "RedTrail", ProductId = MonetizationConfig.Trails.RedTrail },
+		{ Id = "GalaxyTrail", FrameName = "GalaxyTrailFrame", Name = "Galaxy Trail", Tier = "Secret", TierColor = Color3.fromRGB(215, 95, 255), SpeedBonus = 20.0, CoinPrice = 150000, RobuxPrice = 599, PartName = "GalaxyTrail", ProductId = MonetizationConfig.Trails.GalaxyTrail },
 	} :: { TrailMasterInfo },
 }
 

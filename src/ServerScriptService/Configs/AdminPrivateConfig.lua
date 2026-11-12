@@ -2,6 +2,8 @@
 local DataStoreConfig = require(script.Parent:WaitForChild("DataStoreConfig"))
 
 return {
+    GlobalLuckTopic = "GlobalLuckEvent",
+
     MaxAnnounceLength = 100,
     DefaultAnnounceDuration = 6,
     MaxAnnounceDuration = 60,
