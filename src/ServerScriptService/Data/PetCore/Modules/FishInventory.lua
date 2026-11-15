@@ -25,6 +25,7 @@ function FishInventory:AddFish(player, fishData)
 		name = fishData.name,
 		weight = fishData.weight,
 		rarity = fishData.rarity or "Common",
+		mutation = fishData.mutation,
 		uniqueId = uniqueId,
 		timestamp = tick(),
 		isFavorited = false
@@ -63,6 +64,7 @@ function FishInventory:AddExistingFish(player, fishEntry)
 		name = fishEntry.name,
 		weight = fishEntry.weight,
 		rarity = fishEntry.rarity or "Common",
+		mutation = fishEntry.mutation,
 		uniqueId = fishEntry.uniqueId,
 		timestamp = type(fishEntry.timestamp) == "number" and fishEntry.timestamp or tick(),
 		isFavorited = fishEntry.isFavorited == true

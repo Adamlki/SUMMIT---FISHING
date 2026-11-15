@@ -35,9 +35,9 @@ function Resolver.resolve()
 		return false, "GameUI.Component tidak ditemukan"
 	end
 
-	local buttons = component:FindFirstChild("Buttons")
-	local leftHolder = buttons and buttons:FindFirstChild("LeftHolder")
-	local toggleBtn = leftHolder and leftHolder:FindFirstChild("Freecam")
+	local buttons = component:FindFirstChild("ButtonsNew")
+	local menuKanan = buttons and buttons:FindFirstChild("MenuKanan")
+	local toggleBtn = menuKanan and menuKanan:FindFirstChild("FreecamButton")
 	local hotkeyFrame = toggleBtn and (toggleBtn:FindFirstChild("Hotkeys") or toggleBtn:FindFirstChild("Hotkey"))
 
 	local root = component:FindFirstChild("Freecam")

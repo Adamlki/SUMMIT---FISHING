@@ -10,6 +10,7 @@ local Janitor = require(Packages.Janitor)
 local AdminResolver = require(script.Parent.Parent.Modules.Admin.AdminResolver)
 local AdminRuntime = require(script.Parent.Parent.Modules.Admin.AdminRuntime)
 local Logger = require(script.Parent.Parent.Modules.Logger)
+local TopbarIcon = require(script.Parent.Parent.Modules.TopbarIcon)
 local AdminHelpers = script.Parent:WaitForChild("AdminHelpers")
 local PermissionResolver = require(AdminHelpers:WaitForChild("PermissionResolver"))
 local ResolverBootstrap = require(AdminHelpers:WaitForChild("ResolverBootstrap"))
@@ -40,12 +41,17 @@ function Controller:KnitStart()
 		local adminService = Knit.GetService("AdminService")
 		local overheadService = Knit.GetService("OverheadService")
 		local runtime
+		local adminIcon
 
 		local function applyPermission(canUse)
 			if refs.Toggle then
 				refs.Toggle.Visible = canUse == true
 			end
 			if canUse ~= true then
+				if adminIcon then
+					adminIcon:destroy()
+					adminIcon = nil
+				end
 				if refs.Menu then
 					refs.Menu.Visible = false
 				end
@@ -55,8 +61,21 @@ function Controller:KnitStart()
 				return
 			end
 			if not runtime then
-				runtime = AdminRuntime.new(refs, adminService)
+				local ok, result = pcall(AdminRuntime.new, refs, adminService)
+				if not ok then
+					warn("[AdminController] AdminRuntime init failed: " .. tostring(result))
+					return
+				end
+				runtime = result
 				janitor:Add(runtime, "Destroy")
+			end
+			if not adminIcon then
+				adminIcon = TopbarIcon.create(TopbarIcon.Images.Admin, function()
+					runtime:Toggle()
+				end)
+				if adminIcon then
+					janitor:Add(adminIcon, "Destroy")
+				end
 			end
 		end
 

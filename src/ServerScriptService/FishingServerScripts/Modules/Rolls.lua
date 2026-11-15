@@ -45,7 +45,14 @@ local function rollFishForPlayer(player, powerPercent)
 	local fishWeight = FishingConfig.GenerateFishWeight(selectedFish, totalLuck, config.maxWeight)
 	fishWeight = math.floor(fishWeight * 10 + 0.5) / 10
 
-	return { name = selectedFish.name, rarity = selectedFish.rarity, weight = fishWeight }
+	local mutation = FishingConfig.RollMutation(player)
+
+	return {
+		name = selectedFish.name,
+		rarity = selectedFish.rarity,
+		weight = fishWeight,
+		mutation = mutation and mutation.Name or nil
+	}
 end
 
 local function publishRareCatch(player, fishName, weight, rarity)
@@ -81,7 +88,12 @@ local function grantCaughtFish(player, roll)
 	if not targetFish then return false, "missing_template" end
 
 	local clonedFish = targetFish:Clone()
-	local uniqueFishId = DataManager:AddFishWithLimit(player, {name = roll.name, weight = roll.weight, rarity = roll.rarity})
+	local uniqueFishId = DataManager:AddFishWithLimit(player, {
+		name = roll.name,
+		weight = roll.weight,
+		rarity = roll.rarity,
+		mutation = roll.mutation
+	})
 	if not uniqueFishId then return false, "inventory_full" end
 
 	local setupOk = pcall(function()
@@ -89,6 +101,7 @@ local function grantCaughtFish(player, roll)
 		local idValue = Instance.new("StringValue", clonedFish); idValue.Name = "FishId"; idValue.Value = uniqueFishId
 		local wValue = Instance.new("NumberValue", clonedFish); wValue.Name = "Weight"; wValue.Value = roll.weight
 		local rValue = Instance.new("StringValue", clonedFish); rValue.Name = "Rarity"; rValue.Value = roll.rarity
+		local mValue = Instance.new("StringValue", clonedFish); mValue.Name = "Mutation"; mValue.Value = roll.mutation or ""
 		local fValue = Instance.new("BoolValue", clonedFish); fValue.Name = "isFavorited"; fValue.Value = false
 		clonedFish.Parent = backpack
 	end)
@@ -157,7 +170,8 @@ function Rolls.handleRollRequest(player, power, legacyToken, isLegacy)
 			rollId = roll.rollId,
 			name = roll.name,
 			rarity = roll.rarity,
-			weight = roll.weight
+			weight = roll.weight,
+			mutation = roll.mutation
 		})
 	end
 
@@ -166,6 +180,7 @@ function Rolls.handleRollRequest(player, power, legacyToken, isLegacy)
 		Name = roll.name,
 		Rarity = roll.rarity,
 		Weight = roll.weight,
+		Mutation = roll.mutation,
 	})
 end
 
@@ -243,6 +258,7 @@ function Rolls.handleClaimRequest(player, rollId, allowMissingRollId)
 	return State.successResponse({
 		Name = roll.name,
 		Weight = roll.weight,
+		Mutation = roll.mutation,
 	})
 end
 

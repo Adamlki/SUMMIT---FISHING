@@ -35,11 +35,7 @@ function MusicMenuBinder.bind(runtime)
 	-- Menu Toggle Button in TopMid
 	if refs.ToggleBtn then
 		MusicInput.bindButton(runtime._janitor, refs.ToggleBtn, function()
-			if refs.Menu.Visible then
-				runtime:_closeMenu()
-			else
-				runtime:_openMenu()
-			end
+			runtime:_toggleMenu()
 		end)
 	end
 

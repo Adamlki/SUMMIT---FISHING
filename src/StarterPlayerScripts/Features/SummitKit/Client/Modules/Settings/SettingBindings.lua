@@ -1,5 +1,16 @@
 --!nonstrict
+local UserInputService = game:GetService("UserInputService")
+
 local SettingBindings = {}
+
+function SettingBindings.BindHotkey(janitor, keyCode, onToggle)
+    janitor:Add(UserInputService.InputBegan:Connect(function(input, gp)
+        if gp or UserInputService:GetFocusedTextBox() then return end
+        if input.KeyCode == keyCode then
+            onToggle()
+        end
+    end), "Disconnect")
+end
 
 local function bindButton(janitor, btn, fn)
     if not btn then return end

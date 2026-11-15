@@ -35,7 +35,8 @@ function Sell.Install()
 				if removed then
 					local sellWeight = removedData and removedData.weight or 0
 					local sellRarity = removedData and removedData.rarity or "Common"
-					totalCoins = totalCoins + DataManager:CalculateFishPrice(sellWeight, sellRarity)
+					local sellMutation = removedData and removedData.mutation or nil
+					totalCoins = totalCoins + DataManager:CalculateFishPrice(sellWeight, sellRarity, sellMutation)
 					local bp = player:FindFirstChild("Backpack")
 					if bp then for _, t in ipairs(bp:GetChildren()) do if t:FindFirstChild("FishId") and t.FishId.Value == fSell.fishId then t:Destroy() break end end end
 				end
@@ -52,7 +53,7 @@ function Sell.Install()
 				if fData.uniqueId == fishId then fishToSell = fData; break end
 			end
 			if not fishToSell then return end
-			local sellPrice = DataManager:CalculateFishPrice(fishToSell.weight or 0, fishToSell.rarity or "Common")
+			local sellPrice = DataManager:CalculateFishPrice(fishToSell.weight or 0, fishToSell.rarity or "Common", fishToSell.mutation)
 			local removed, removedData = DataManager:RemoveFish(player, fishId)
 			if removed then
 				GameProfileService:AddCoins(player, sellPrice)

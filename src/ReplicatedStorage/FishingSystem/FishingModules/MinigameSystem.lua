@@ -8,14 +8,10 @@
 local MinigameSystem = {}
 local RepStorage = game:GetService("ReplicatedStorage"):WaitForChild("FishingSystem")
 local TS = game:GetService("TweenService")
-local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 
--- Asumsi ini dijalankan di klien
-local LocalPlayer = Players.LocalPlayer
-local PlayerGui = LocalPlayer and LocalPlayer:WaitForChild("PlayerGui")
-
 local FishingConfig = require(RepStorage:WaitForChild("FishingConfig"))
+local HudVisibility = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("UI"):WaitForChild("HudVisibility"))
 
 
 local minigameState = {
@@ -35,8 +31,6 @@ local cameraState = {
 	originalCameraType = Enum.CameraType.Custom,
 	isZoomed = false
 }
--- Cari HotbarFrame di PlayerGui/CustomInventoryGui
-local hotbarFrame = PlayerGui and PlayerGui:FindFirstChild("CustomInventoryGui") and PlayerGui.CustomInventoryGui:FindFirstChild("HotbarFrame")
 
 local gui = nil
 local callbacks = {}
@@ -70,15 +64,11 @@ local function applyZoom(targetFOV)
 end
 
 local function hideHotbar()
-	if hotbarFrame then
-		hotbarFrame.Visible = false
-	end
+	HudVisibility:SetHotbarDesired(false)
 end
 
 local function showHotbar()
-	if hotbarFrame then
-		hotbarFrame.Visible = true
-	end
+	HudVisibility:SetHotbarDesired(true)
 end
 
 -- Diubah: TIDAK mengembalikan CameraType ke Custom/Custom karena tidak diubah
@@ -108,10 +98,6 @@ end
 
 function MinigameSystem:Initialize(guiElements)
 	gui = guiElements
-	-- Memastikan HotbarFrame diambil jika Initialize dipanggil belakangan
-	if not hotbarFrame and PlayerGui and PlayerGui:FindFirstChild("CustomInventoryGui") then
-		hotbarFrame = PlayerGui.CustomInventoryGui:FindFirstChild("HotbarFrame")
-	end
 end
 
 function MinigameSystem:SetCallbacks(onComplete, onFail)

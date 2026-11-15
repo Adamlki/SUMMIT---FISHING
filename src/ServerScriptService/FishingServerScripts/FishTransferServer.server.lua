@@ -109,6 +109,11 @@ local function giveFishTool(player, fishData)
 	rarityValue.Value = fishData.rarity
 	rarityValue.Parent = clonedFish
 
+	local mutationValue = Instance.new("StringValue")
+	mutationValue.Name = "Mutation"
+	mutationValue.Value = fishData.mutation or ""
+	mutationValue.Parent = clonedFish
+
 	local favoritedValue = Instance.new("BoolValue")
 	favoritedValue.Name = "isFavorited"
 	favoritedValue.Value = false -- Transfer resets favorite status

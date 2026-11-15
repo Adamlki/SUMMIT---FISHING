@@ -1,4 +1,6 @@
 --!nonstrict
+local Panel = require(script.Parent.Parent.Parent.Parent.UI.Panel)
+
 local MenuState = {}
 
 function MenuState.hideAllPages(runtime)
@@ -49,27 +51,21 @@ function MenuState.showPage(runtime, name)
 end
 
 function MenuState.toggle(runtime)
-	runtime._visible = not runtime._visible
+	local refs = runtime._refs
+	if not refs.Menu or not refs.Root then
+		return
+	end
+	runtime._visible = not Panel.isOpen(refs.Root)
+	refs.Menu.Visible = runtime._visible
 	if runtime._visible then
-		if runtime._refs.Menu then
-			runtime._refs.Menu.Visible = true
-		end
-		local conn = runtime._animator:Open()
-		if conn then
-			runtime._janitor:Add(conn, "Disconnect")
-		end
+		Panel.open(refs.Root)
 	else
-		local conn = runtime._animator:Close()
-		if conn then
-			runtime._janitor:Add(conn, "Disconnect")
-		end
-		if runtime._refs.Menu then
-			task.delay(0.22, function()
-				if runtime._refs and runtime._refs.Menu and not runtime._visible then
-					runtime._refs.Menu.Visible = false
-				end
-			end)
-		end
+		Panel.close(refs.Root)
+		task.delay(0.25, function()
+			if runtime._refs and runtime._refs.Menu and not Panel.isOpen(runtime._refs.Root) then
+				runtime._refs.Menu.Visible = false
+			end
+		end)
 	end
 end
 

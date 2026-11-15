@@ -106,9 +106,9 @@ function DataManager:EndProfile(player)
 end
 
 -- ===== PRICE CALCULATION =====
-function DataManager:CalculateFishPrice(weight, rarity)
+function DataManager:CalculateFishPrice(weight, rarity, mutation)
 	local FishingConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("FishingSystem"):WaitForChild("FishingConfig"))
-	return FishingConfig.CalculateFishPrice(weight, rarity)
+	return FishingConfig.CalculateFishPrice(weight, rarity, FishingConfig.GetMutationMultiplier(mutation))
 end
 
 return DataManager

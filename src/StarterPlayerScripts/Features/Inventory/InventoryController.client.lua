@@ -26,6 +26,8 @@ local Viewport = require(script.Parent.Modules.Viewport)
 local Hotbar = require(script.Parent.Modules.Hotbar)
 local Grid = require(script.Parent.Modules.Grid)
 local Interactions = require(script.Parent.Modules.Interactions)
+local Panel = require(script.Parent.Parent.SummitKit.Client.Modules.UI.Panel)
+local HudVisibility = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("UI"):WaitForChild("HudVisibility"))
 
 local Controller = {}
 Controller.__index = Controller
@@ -51,6 +53,8 @@ function Controller.new()
 	self.playerGui = self.player:WaitForChild("PlayerGui")
 	self.VIP_GAMEPASS_ID = MonetizationConfig.VIP.LegacyGamePassId
 	self.isVIP = false
+	self.isAdmin = false
+	self.HotbarHighlightColor = Color3.fromRGB(57, 255, 20)
 
 	self.gui = nil
 	self.Hotbar = {}
@@ -130,11 +134,12 @@ function Controller:RefreshAllData()
 		self:PopulateRodGrid()
 	elseif self.currentTab == "Tools" then
 		self:PopulateToolGrid()
-	elseif self.currentTab == "VIP" and self.isVIP then
-		self:PopulateVIPToolGrid()
+	elseif self.currentTab == "Admin" and self.isAdmin then
+		self:PopulateAdminToolGrid()
 	end
 
 	self:UpdateFishCount()
+	self:UpdateEmptyState()
 	self.isRefreshing = false
 end
 
@@ -142,23 +147,27 @@ function Controller:SwitchTab(tabName)
 	self.lastOpenedTab = tabName
 	self.currentTab = tabName
 
-	if self.Inventory.FishTabButton then self.Inventory.FishTabButton.BackgroundColor3 = Color3.fromRGB(49, 49, 49) end
-	if self.Inventory.RodTabButton then self.Inventory.RodTabButton.BackgroundColor3 = Color3.fromRGB(49, 49, 49) end
-	if self.Inventory.ToolTabButton then self.Inventory.ToolTabButton.BackgroundColor3 = Color3.fromRGB(49, 49, 49) end
-	if self.Inventory.VIPTabButton then
-		self.Inventory.VIPTabButton.BackgroundColor3 = Color3.fromRGB(49, 49, 49)
+	local function setTabState(button, active)
+		if not button then return end
+		local base = button:GetAttribute("BaseColor") or button.BackgroundColor3
+		button.BackgroundColor3 = active and base:Lerp(Color3.new(0, 0, 0), 0.18) or base
 	end
+
+	setTabState(self.Inventory.FishTabButton, false)
+	setTabState(self.Inventory.RodTabButton, false)
+	setTabState(self.Inventory.ToolTabButton, false)
+	setTabState(self.Inventory.AdminTabButton, false)
 
 	if self.Inventory.FishContent then self.Inventory.FishContent.Visible = false end
 	if self.Inventory.RodContent then self.Inventory.RodContent.Visible = false end
 	if self.Inventory.ToolContent then self.Inventory.ToolContent.Visible = false end
-	if self.Inventory.VIPContent then
-		self.Inventory.VIPContent.Visible = false
+	if self.Inventory.AdminContent then
+		self.Inventory.AdminContent.Visible = false
 	end
 	if self.Inventory.SellAllButton then self.Inventory.SellAllButton.Visible = false end
 
 	if tabName == "Fish" and self.Inventory.FishTabButton and self.Inventory.FishContent then
-		self.Inventory.FishTabButton.BackgroundColor3 = Color3.fromRGB(106, 106, 106)
+		setTabState(self.Inventory.FishTabButton, true)
 		self.Inventory.FishContent.Visible = true
 		if self.Inventory.SellAllButton then self.Inventory.SellAllButton.Visible = true end
 		if self.Inventory.FishCountLabel then
@@ -166,40 +175,47 @@ function Controller:SwitchTab(tabName)
 		end
 		self:PopulateFishGrid()
 	elseif tabName == "Rods" and self.Inventory.RodTabButton and self.Inventory.RodContent then
-		self.Inventory.RodTabButton.BackgroundColor3 = Color3.fromRGB(106, 106, 106)
+		setTabState(self.Inventory.RodTabButton, true)
 		self.Inventory.RodContent.Visible = true
 		if self.Inventory.FishCountLabel then
 			self.Inventory.FishCountLabel.Visible = false
 		end
 		self:PopulateRodGrid()
 	elseif tabName == "Tools" and self.Inventory.ToolTabButton and self.Inventory.ToolContent then
-		self.Inventory.ToolTabButton.BackgroundColor3 = Color3.fromRGB(106, 106, 106)
+		setTabState(self.Inventory.ToolTabButton, true)
 		self.Inventory.ToolContent.Visible = true
 		if self.Inventory.FishCountLabel then
 			self.Inventory.FishCountLabel.Visible = false
 		end
 		self:PopulateToolGrid()
-	elseif tabName == "VIP" and self.isVIP and self.Inventory.VIPTabButton and self.Inventory.VIPContent then
-		self.Inventory.VIPTabButton.BackgroundColor3 = Color3.fromRGB(106, 106, 106)
-		self.Inventory.VIPContent.Visible = true
+	elseif tabName == "Admin" and self.isAdmin and self.Inventory.AdminTabButton and self.Inventory.AdminContent then
+		setTabState(self.Inventory.AdminTabButton, true)
+		self.Inventory.AdminContent.Visible = true
 		if self.Inventory.FishCountLabel then
 			self.Inventory.FishCountLabel.Visible = false
 		end
-		self:PopulateVIPToolGrid()
+		self:PopulateAdminToolGrid()
 	end
+
+	self:UpdateEmptyState()
 end
 
 function Controller:ToggleInventory(visible)
 	if visible == self.isInventoryOpen then return end
 
 	self.isInventoryOpen = visible
-	if self.Inventory.Frame then
-		self.Inventory.Frame.Visible = visible
-	end
+	local frame = self.Inventory.Frame
+	if not frame then return end
 
 	if visible then
+		-- Panel yang sama dengan Shop/Index: backdrop gelap, tutup panel lain,
+		-- dan HUD (SideDrawer + hotbar) menyingkir.
+		Panel.mount(frame, { backdropGui = frame.Parent, backdropZ = 0 })
 		self:RefreshAllData()
 		self:SwitchTab(self.lastOpenedTab)
+		Panel.open(frame)
+	else
+		Panel.close(frame)
 	end
 end
 
@@ -229,9 +245,7 @@ function Controller:SetupCharacter(character)
 		end)
 	end))
 
-	if self.Hotbar.Frame then
-		self.Hotbar.Frame.Visible = true
-	end
+	HudVisibility:SetHotbarDesired(true)
 
 	if self.Hotbar.BagButton then self.Hotbar.BagButton.Active = true end
 	if self.Hotbar.RodSlot then self.Hotbar.RodSlot.Active = true end

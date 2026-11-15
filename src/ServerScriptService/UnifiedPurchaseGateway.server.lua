@@ -213,6 +213,21 @@ local handlerFunction = function(receiptInfo: { PlayerId: number, ProductId: num
 		end
 	end
 
+	-- [JALUR 6]: Spin Wheel Products (SpinService)
+	if not decision or decision == Enum.ProductPurchaseDecision.NotProcessedYet then
+		local okSpin, spinService = pcall(function()
+			return require(ServerScriptService:WaitForChild("SpinService"))
+		end)
+		if okSpin and spinService and spinService.ProcessReceipt then
+			local okProc, dec = pcall(function()
+				return spinService.ProcessReceipt(receiptInfo)
+			end)
+			if okProc and dec ~= nil and dec ~= Enum.ProductPurchaseDecision.NotProcessedYet then
+				decision = dec
+			end
+		end
+	end
+
 	if not decision then
 		decision = Enum.ProductPurchaseDecision.NotProcessedYet
 	end

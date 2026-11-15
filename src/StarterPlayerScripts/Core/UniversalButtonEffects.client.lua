@@ -3,6 +3,8 @@
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local SoundService = game:GetService("SoundService")
+local ContentProvider = game:GetService("ContentProvider")
+local CollectionService = game:GetService("CollectionService")
 
 local localPlayer = Players.LocalPlayer
 local playerGui = localPlayer:WaitForChild("PlayerGui")
@@ -12,8 +14,34 @@ local TWEEN_SQUASH = TweenInfo.new(0.08, Enum.EasingStyle.Quart, Enum.EasingDire
 local TWEEN_BOUNCE = TweenInfo.new(0.22, Enum.EasingStyle.Back, Enum.EasingDirection.Out)
 
 local CLICK_SOUND_ID = "rbxassetid://6895079853"
+local CLICK_VOLUME = 0.28
+local SOUND_POOL_SIZE = 3
 
 local lastClickSoundTime = 0
+local clickSounds: { Sound } = {}
+local clickIndex = 0
+
+-- Sound di-cache & di-preload sekali: kalau bikin Sound baru tiap klik, Roblox
+-- harus load asset dulu -> suara klik terasa delay.
+local function ensureClickSounds()
+	if #clickSounds > 0 then
+		return
+	end
+	for i = 1, SOUND_POOL_SIZE do
+		local sound = Instance.new("Sound")
+		sound.Name = "UniversalClick_" .. tostring(i)
+		sound.SoundId = CLICK_SOUND_ID
+		sound.Volume = CLICK_VOLUME
+		sound.Parent = SoundService
+		table.insert(clickSounds, sound)
+	end
+	task.spawn(function()
+		pcall(function()
+			ContentProvider:PreloadAsync(clickSounds)
+		end)
+	end)
+end
+
 local function playClickSound()
 	local now = os.clock()
 	if now - lastClickSoundTime < 0.08 then
@@ -21,20 +49,21 @@ local function playClickSound()
 	end
 	lastClickSoundTime = now
 
-	task.spawn(function()
-		local sound = Instance.new("Sound")
-		sound.SoundId = CLICK_SOUND_ID
-		sound.Volume = 0.28
-		sound.Parent = SoundService
-		sound:Play()
-		sound.Ended:Connect(function() sound:Destroy() end)
-	end)
+	ensureClickSounds()
+	clickIndex = (clickIndex % #clickSounds) + 1
+	local sound = clickSounds[clickIndex]
+	sound.TimePosition = 0
+	sound:Play()
 end
 
 local function attachTactile(btn: GuiObject)
 	if not (btn:IsA("GuiButton")) then return end
 	if btn:GetAttribute("HasTactileEffect") == true then return end
 	btn:SetAttribute("HasTactileEffect", true)
+
+	-- Tombol yang sudah punya sound sendiri (tag ButtonClick/ButtonOpen) jangan
+	-- diputar sound-nya dua kali.
+	local hasCustomSound = CollectionService:HasTag(btn, "ButtonClick") or CollectionService:HasTag(btn, "ButtonOpen")
 
 	local scale = btn:FindFirstChild("TactileScale") :: UIScale?
 	if not scale then
@@ -58,7 +87,9 @@ local function attachTactile(btn: GuiObject)
 	end)
 
 	btn.MouseButton1Down:Connect(function()
-		playClickSound()
+		if not hasCustomSound then
+			playClickSound()
+		end
 		TweenService:Create(scale, TWEEN_SQUASH, { Scale = baseScale * 0.93 }):Play()
 	end)
 
@@ -72,6 +103,9 @@ for _, desc in ipairs(playerGui:GetDescendants()) do
 		attachTactile(desc)
 	end
 end
+
+-- Mulai preload lebih awal supaya klik pertama pun langsung bunyi.
+ensureClickSounds()
 
 playerGui.DescendantAdded:Connect(function(desc)
 	if desc:IsA("GuiButton") then

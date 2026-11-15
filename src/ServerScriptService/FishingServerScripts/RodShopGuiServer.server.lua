@@ -280,7 +280,7 @@ local function buyRodWithCoins(player: Player, rodName: string)
 		local success, remaining = GameProfileService:TryPurchase(player, price)
 		if success then
 			giveRod(player, rodName)
-			rePurchaseSuccess:FireClient(player)
+			rePurchaseSuccess:FireClient(player, { Name = rodName })
 			return { success = true, rodName = rodName, remainingCoins = remaining }
 		else
 			notify(player, "Koin kamu tidak cukup! Butuh " .. tostring(price) .. " Koin.", Color3.fromRGB(255, 100, 100))
@@ -288,7 +288,7 @@ local function buyRodWithCoins(player: Player, rodName: string)
 		end
 	else
 		giveRod(player, rodName)
-		rePurchaseSuccess:FireClient(player)
+		rePurchaseSuccess:FireClient(player, { Name = rodName })
 		return { success = true, rodName = rodName }
 	end
 end
@@ -463,7 +463,7 @@ MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player: Playe
 			rodTool:Clone().Parent = player.Backpack
 		end
 		notify(player, "👑 Selamat! Kamu mendapatkan VIP Chat Tag, Green Trail, dan Gold Rod!", Color3.fromRGB(255, 215, 0))
-		rePurchaseSuccess:FireClient(player)
+		rePurchaseSuccess:FireClient(player, { Name = "VIP Pack" })
 		return
 	end
 
@@ -472,7 +472,7 @@ MarketplaceService.PromptGamePassPurchaseFinished:Connect(function(player: Playe
 		if config.Type == "Gamepass" and config.GamePassId == purchasedGamepassId then
 			task.wait(0.5)
 			giveRod(player, rodName)
-			rePurchaseSuccess:FireClient(player)
+			rePurchaseSuccess:FireClient(player, { Name = rodName })
 			break
 		end
 	end

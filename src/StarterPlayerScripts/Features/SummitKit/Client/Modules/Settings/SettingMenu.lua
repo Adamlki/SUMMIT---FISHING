@@ -13,13 +13,12 @@ local SettingsState = require(script.Parent.SettingsState)
 local SettingsUI = require(script.Parent.SettingsUI)
 local SettingsAppliers = require(script.Parent.SettingsAppliers)
 local SettingHelpers = script.Parent:WaitForChild("SettingHelpers")
-local MenuAnimator = require(SettingHelpers:WaitForChild("MenuAnimator"))
 local SettingsBinder = require(SettingHelpers:WaitForChild("SettingsBinder"))
+local Panel = require(script.Parent.Parent.UI.Panel)
 
 local SettingMenu = {}
 
 local janitor = Janitor.new()
-local menuAnimator = MenuAnimator.new()
 
 local VALUE_MIN = -200
 local VALUE_MAX = 200
@@ -44,7 +43,14 @@ local function applySettings()
 end
 
 local function tweenMenu(visible)
-    menuAnimator:play(refs, visible)
+    if not refs or not refs.Menu then
+        return
+    end
+    if visible then
+        Panel.open(refs.Menu)
+    else
+        Panel.close(refs.Menu)
+    end
 end
 
 local function flip(name)
@@ -77,10 +83,15 @@ local function bindAll()
         return
     end
     SettingBindings.BindMenu(janitor, refs, function()
-        tweenMenu(not refs.Menu.Visible)
+        tweenMenu(not Panel.isOpen(refs.Menu))
     end, function()
         tweenMenu(false)
     end)
+    if not refs.ToggleBtn then
+        SettingBindings.BindHotkey(janitor, Enum.KeyCode.F1, function()
+            tweenMenu(not Panel.isOpen(refs.Menu))
+        end)
+    end
     SettingBindings.BindToggles(janitor, refs.Toggles, flip)
     SettingBindings.BindAdjusters(janitor, refs.Adjusters, changeAdjuster, resetToDefaults)
 end
@@ -166,8 +177,14 @@ function SettingMenu.setupForPlayer(player)
     return true
 end
 
+function SettingMenu.toggle()
+    if not refs or not refs.Menu then
+        return
+    end
+    tweenMenu(not Panel.isOpen(refs.Menu))
+end
+
 function SettingMenu.destroy()
-    menuAnimator:cleanup()
     janitor:Destroy()
 end
 

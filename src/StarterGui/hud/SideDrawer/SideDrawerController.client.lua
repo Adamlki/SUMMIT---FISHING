@@ -10,7 +10,7 @@ local player = Players.LocalPlayer
 local drawer = script.Parent :: Frame
 local content = drawer:WaitForChild("DrawerContent") :: Frame
 local toggleBtn = drawer:WaitForChild("ToggleSlideBtn") :: TextButton
-local arrow = toggleBtn:WaitForChild("Arrow") :: TextLabel
+local arrow = (toggleBtn:FindFirstChild("Arrow") or toggleBtn:FindFirstChild("ImageLabel")) :: GuiObject?
 
 local adminCard = content:WaitForChild("AdminEventsCard") :: Frame
 local cardBox = adminCard:WaitForChild("CardBox") :: Frame
@@ -32,7 +32,8 @@ local inviteBtn = friendLuckFrame:WaitForChild("InviteBtn") :: TextButton
 local coinFrame = luckContainer:WaitForChild("CoinFrame") :: Frame
 local coinLabel = coinFrame:WaitForChild("CoinLabel") :: TextLabel
 
-local labelFrame = luckContainer:WaitForChild("LabelFrame") :: Frame
+-- Badge gamepass sekarang di kanan bawah, terpisah dari drawer luck/event.
+local labelFrame = drawer.Parent:WaitForChild("LabelFrame") :: Frame
 local edvancedIcon = labelFrame:FindFirstChild("EdvancedLuckIcon") :: ImageLabel?
 local extraIcon = labelFrame:FindFirstChild("ExtraLuckIcon") :: ImageLabel?
 local smallIcon = labelFrame:FindFirstChild("SmallLuckIcon") :: ImageLabel?
@@ -68,7 +69,13 @@ local function setDrawerOpen(open: boolean)
 	local targetPos = isOpen and POS_DRAWER_OPEN or POS_DRAWER_CLOSED
 	local targetArrow = isOpen and "◀" or "▶"
 
-	arrow.Text = targetArrow
+	if arrow then
+		if arrow:IsA("TextLabel") then
+			arrow.Text = targetArrow
+		else
+			arrow.Rotation = if isOpen then 0 else 180
+		end
+	end
 	local tw = TweenService:Create(drawer, tweenSlide, { Position = targetPos })
 	tw:Play()
 
@@ -94,6 +101,8 @@ end)
 -- ===================================================================
 -- GAMEPASS ICONS INDICATOR ENGINE (LabelFrame)
 -- ===================================================================
+local panelFocused = false
+
 local function updateGamepassIcons()
 	local hasEdvanced = player:GetAttribute("EdvancedLuck") == true
 	local hasExtra = player:GetAttribute("ExtraLuck") == true
@@ -108,7 +117,7 @@ local function updateGamepassIcons()
 	if vipIcon then vipIcon.Visible = hasVIP end
 
 	local anyActive = hasEdvanced or hasExtra or hasSmall or hasMutation or hasVIP
-	labelFrame.Visible = anyActive
+	labelFrame.Visible = anyActive and not panelFocused
 end
 
 -- Connect attribute signals for real-time activation indicator
@@ -171,6 +180,7 @@ task.spawn(updateFriendLuck)
 -- Live Server Luck Sync
 local function updateServerLuck()
 	local mult = luckValue and luckValue.Value or 1
+	serverLuckFrame.Visible = mult > 1
 	serverLuckLabel.Text = string.format("Server Luck: %.1fx", mult)
 end
 if luckValue then
@@ -187,6 +197,7 @@ local function updateAdminEvent()
 		local l = luckValue and luckValue.Value or 1
 		local m = mutValue and mutValue.Value or 1
 		statLuck.Text = string.format("Luck: %.1fx", l)
+		statBonusLuck.Text = string.format("Bonus Luck +%d%%", math.floor((l - 1) * 100 + 0.5))
 		statMutation.Text = string.format("Mutations: %.1fx", m)
 	else
 		adminCard.Visible = false
@@ -195,6 +206,13 @@ end
 if eventNameValue then
 	eventNameValue.Changed:Connect(updateAdminEvent)
 	updateAdminEvent()
+end
+-- Multiplier di-set server sesudah ActiveEventName, jadi refresh juga saat nilainya berubah
+if luckValue then
+	luckValue.Changed:Connect(updateAdminEvent)
+end
+if mutValue then
+	mutValue.Changed:Connect(updateAdminEvent)
 end
 
 -- Timer Pill
@@ -212,5 +230,41 @@ task.spawn(function()
 	end
 end)
 
+-- Personal Luck (hadiah Spin Wheel / admin): tampilkan baris sendiri di drawer.
+local personalLuckFrame = luckContainer:FindFirstChild("PersonalLuckFrame")
+if not personalLuckFrame then
+	personalLuckFrame = serverLuckFrame:Clone()
+	personalLuckFrame.Name = "PersonalLuckFrame"
+	personalLuckFrame.Visible = false
+	personalLuckFrame.Parent = luckContainer
+end
+local personalLuckLabel = personalLuckFrame:FindFirstChild("ServerLuckLabel") :: TextLabel?
+if personalLuckLabel then
+	personalLuckLabel.Text = "Your Luck: 1x"
+end
+local function updatePersonalLuck()
+	local mult = player:GetAttribute("PersonalLuckMultiplier") or 1
+	personalLuckFrame.Visible = mult > 1.001
+	if mult > 1.001 and personalLuckLabel then
+		personalLuckLabel.Text = string.format("Your Luck: %.2fx", mult)
+	end
+end
+player:GetAttributeChangedSignal("PersonalLuckMultiplier"):Connect(updatePersonalLuck)
+updatePersonalLuck()
+
 -- Initial Setup
 drawer.Position = POS_DRAWER_OPEN
+
+-- Fokus panel (Panel.lua): SideDrawer + badge ikut menyingkir saat panel dibuka.
+local hudGui = drawer.Parent
+local function applyPanelFocus(focused: boolean)
+	panelFocused = focused
+	drawer.Visible = not focused
+	updateGamepassIcons()
+end
+if hudGui:GetAttribute("Focus") == true then
+	applyPanelFocus(true)
+end
+hudGui:GetAttributeChangedSignal("Focus"):Connect(function()
+	applyPanelFocus(hudGui:GetAttribute("Focus") == true)
+end)

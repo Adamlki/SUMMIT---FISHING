@@ -1,10 +1,10 @@
 --!nonstrict
-local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Packages = Shared.Packages
 local Janitor = require(Packages.Janitor)
 local Signal = require(Packages.Signal)
+local Panel = require(script.Parent.Parent.UI.Panel)
 
 local AvatarViewUI = {}
 AvatarViewUI.__index = AvatarViewUI
@@ -54,6 +54,7 @@ function AvatarViewUI.new(refs)
         self.menuFrame.AnchorPoint = Vector2.new(0.5, 0.5)
         self.menuFrame.Position = self.hiddenPos
         self.menuFrame.Visible = false
+        Panel.mount(self.menuFrame, { shown = self.shownPos, hidden = self.hiddenPos })
         self.janitor:Add(self.menuFrame, "Destroy")
     end
 
@@ -95,28 +96,22 @@ function AvatarViewUI.new(refs)
     return self
 end
 
+function AvatarViewUI:isOpen()
+    return Panel.isOpen(self.menuFrame)
+end
+
 function AvatarViewUI:show()
     if not self.menuFrame then
         return
     end
-    self.menuFrame.Visible = true
-    self.menuFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    self.menuFrame.Position = self.hiddenPos
-    TweenService:Create(self.menuFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = self.shownPos}):Play()
+    Panel.open(self.menuFrame)
 end
 
 function AvatarViewUI:hide()
     if not self.menuFrame then
         return
     end
-    local tween = TweenService:Create(self.menuFrame, TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Position = self.hiddenPos})
-    self.janitor:Add(tween, "Cancel")
-    self.janitor:Add(tween.Completed:Connect(function()
-        if self.menuFrame then
-            self.menuFrame.Visible = false
-        end
-    end), "Disconnect")
-    tween:Play()
+    Panel.close(self.menuFrame)
 end
 
 function AvatarViewUI:destroy()

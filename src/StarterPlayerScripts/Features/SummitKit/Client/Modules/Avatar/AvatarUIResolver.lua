@@ -35,9 +35,10 @@ function AvatarUIResolver.resolve(customGui)
         return false, "GameUI.Component atau GameUI.Menus tidak ada"
     end
 
-    local buttons = waitForPath(component, {"Buttons"})
-    local topMid = buttons and waitForPath(buttons, {"TopMid"})
-    local toggleBtn = topMid and waitForPath(topMid, {"Avatar"})
+    local buttons = waitForPath(component, {"ButtonsNew"})
+    local menuKiri = buttons and waitForPath(buttons, {"MenuKiri"})
+    local frameBtn = menuKiri and waitForPath(menuKiri, {"FrameBtn"})
+    local toggleBtn = frameBtn and waitForPath(frameBtn, {"AvatarButton"})
 
     local menuFrame = waitForPath(menus, {"Avatar"})
     if not menuFrame then

@@ -1,5 +1,4 @@
 --!nonstrict
-local TweenService = game:GetService("TweenService")
 local MarketplaceService = game:GetService("MarketplaceService")
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
@@ -7,6 +6,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Shared = ReplicatedStorage.Shared
 local Packages = Shared.Packages
 local Janitor = require(Packages.Janitor)
+local Panel = require(script.Parent.Parent.UI.Panel)
 
 local DonationsView = {}
 DonationsView.__index = DonationsView
@@ -56,6 +56,7 @@ function DonationsView.new(refs)
         self.menuFrame.AnchorPoint = Vector2.new(0.5, 0.5)
         self.menuFrame.Position = self.hiddenPos
         self.menuFrame.Visible = false
+        Panel.mount(self.menuFrame, { shown = self.shownPos, hidden = self.hiddenPos })
         self.janitor:Add(self.menuFrame, "Destroy")
     end
 
@@ -65,7 +66,7 @@ function DonationsView.new(refs)
 
     if self.toggleBtn then
         connectButton(self.toggleBtn, function()
-            if self.menuFrame and self.menuFrame.Visible then
+            if Panel.isOpen(self.menuFrame) then
                 self:hide()
             else
                 self:show()
@@ -86,24 +87,14 @@ function DonationsView:show()
     if not self.menuFrame then
         return
     end
-    self.menuFrame.Visible = true
-    self.menuFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-    self.menuFrame.Position = self.hiddenPos
-    TweenService:Create(self.menuFrame, TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out), {Position = self.shownPos}):Play()
+    Panel.open(self.menuFrame)
 end
 
 function DonationsView:hide()
     if not self.menuFrame then
         return
     end
-    local tween = TweenService:Create(self.menuFrame, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {Position = self.hiddenPos})
-    self.janitor:Add(tween, "Cancel")
-    self.janitor:Add(tween.Completed:Connect(function()
-        if self.menuFrame then
-            self.menuFrame.Visible = false
-        end
-    end), "Disconnect")
-    tween:Play()
+    Panel.close(self.menuFrame)
 end
 
 function DonationsView:setProducts(products)

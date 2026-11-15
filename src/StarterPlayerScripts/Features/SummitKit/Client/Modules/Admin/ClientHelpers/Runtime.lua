@@ -6,7 +6,6 @@ local Janitor = require(Packages.Janitor)
 local Promise = require(Packages.Promise)
 
 local AdminInput = require(script.Parent.Input)
-local AdminAnimator = require(script.Parent.Animator)
 local Util = require(script.Parent.Parent.RuntimeHelpers.Util)
 local SelectState = require(script.Parent.Parent.RuntimeHelpers.Actions.SelectState)
 local Tabs = require(script.Parent.Parent.RuntimeHelpers.Tabs)
@@ -34,7 +33,6 @@ function AdminRuntime.new(refs, service)
 	self._refs = refs
 	self._service = service
 	self._janitor = Janitor.new()
-	self._animator = AdminAnimator.new(refs.Root)
 	self._visible = false
 	self._announceScope = "Server"
 	self._bootstrap = nil

@@ -1,6 +1,68 @@
 local Module = {}
 
 function Module.Install(Controller)
+local DEFAULT_HIGHLIGHT = Color3.fromRGB(57, 255, 20)
+
+function Controller:SetHotbarSlotHighlight(slot, active)
+	if not slot then return end
+	local bg = slot:FindFirstChild("Bg")
+	local stroke = bg and bg:FindFirstChildOfClass("UIStroke")
+	if not stroke then return end
+
+	self._slotHighlightBase = self._slotHighlightBase or {}
+	local base = self._slotHighlightBase[slot]
+	if not base then
+		base = { color = stroke.Color, thickness = stroke.Thickness }
+		self._slotHighlightBase[slot] = base
+	end
+
+	if active then
+		stroke.Color = self.HotbarHighlightColor or DEFAULT_HIGHLIGHT
+		stroke.Thickness = 3
+		stroke.Transparency = 0
+	else
+		stroke.Color = base.color
+		stroke.Thickness = base.thickness
+	end
+end
+
+function Controller:RefreshHotbarHighlights()
+	local slots = {
+		self.Hotbar.RodSlot,
+		self.Hotbar.ToolSlot1,
+		self.Hotbar.ToolSlot2,
+		self.Hotbar.FishSlot1,
+		self.Hotbar.FishSlot2,
+	}
+	for _, slot in ipairs(slots) do
+		self:SetHotbarSlotHighlight(slot, false)
+	end
+
+	local char = self.player.Character
+	local held = char and char:FindFirstChildOfClass("Tool")
+	if held then
+		if self.CollectionService:HasTag(held, "Rod") or self:IsRodName(held.Name) then
+			self:SetHotbarSlotHighlight(self.Hotbar.RodSlot, true)
+		else
+			local fishIdValue = held:FindFirstChild("FishId")
+			if fishIdValue then
+				local fishId = fishIdValue.Value
+				if fishId == self.lastEquippedFishId1 then
+					self:SetHotbarSlotHighlight(self.Hotbar.FishSlot1, true)
+				elseif fishId == self.lastEquippedFishId2 then
+					self:SetHotbarSlotHighlight(self.Hotbar.FishSlot2, true)
+				end
+			elseif held.Name == self.lastEquippedToolName1 then
+				self:SetHotbarSlotHighlight(self.Hotbar.ToolSlot1, true)
+			elseif held.Name == self.lastEquippedToolName2 then
+				self:SetHotbarSlotHighlight(self.Hotbar.ToolSlot2, true)
+			end
+		end
+	end
+
+	self:RefreshCardHighlights()
+end
+
 -- Visual for Slot 1: Rod (STRICTLY RODS ONLY)
 function Controller:UpdateRodVisual(rodName)
 	if not rodName or rodName == "" then
@@ -15,6 +77,7 @@ function Controller:UpdateRodVisual(rodName)
 			self.Hotbar.RodSlot.ImageColor3 = Color3.fromRGB(255, 255, 255)
 			self.Hotbar.RodSlot.BackgroundTransparency = 1
 		end
+		self:RefreshHotbarHighlights()
 		return
 	end
 
@@ -41,6 +104,7 @@ function Controller:UpdateRodVisual(rodName)
 			self.Hotbar.RodSlot.ImageColor3 = Color3.fromRGB(255, 255, 255)
 		end
 	end
+	self:RefreshHotbarHighlights()
 end
 
 -- Visual for Slot 2: Tool 1 (STRICTLY NON-ROD TOOLS ONLY)
@@ -57,6 +121,7 @@ function Controller:UpdateToolVisual1(toolName)
 			self.Hotbar.ToolSlot1.ImageColor3 = Color3.fromRGB(255, 255, 255)
 			self.Hotbar.ToolSlot1.BackgroundTransparency = 1
 		end
+		self:RefreshHotbarHighlights()
 		return
 	end
 
@@ -102,6 +167,7 @@ function Controller:UpdateToolVisual1(toolName)
 			self.Hotbar.ToolSlot1.ImageColor3 = Color3.fromRGB(255, 255, 255)
 		end
 	end
+	self:RefreshHotbarHighlights()
 end
 
 -- Visual for Slot 3: Tool 2 (STRICTLY NON-ROD TOOLS ONLY)
@@ -118,6 +184,7 @@ function Controller:UpdateToolVisual2(toolName)
 			self.Hotbar.ToolSlot2.ImageColor3 = Color3.fromRGB(255, 255, 255)
 			self.Hotbar.ToolSlot2.BackgroundTransparency = 1
 		end
+		self:RefreshHotbarHighlights()
 		return
 	end
 
@@ -163,6 +230,7 @@ function Controller:UpdateToolVisual2(toolName)
 			self.Hotbar.ToolSlot2.ImageColor3 = Color3.fromRGB(255, 255, 255)
 		end
 	end
+	self:RefreshHotbarHighlights()
 end
 
 -- Visual for Slot 4: Fish 1
@@ -176,6 +244,7 @@ function Controller:UpdateFishVisual1(fishId)
 			self.Hotbar.FishSlot1.ImageColor3 = Color3.fromRGB(255, 255, 255)
 			self.Hotbar.FishSlot1.BackgroundTransparency = 1
 		end
+		self:RefreshHotbarHighlights()
 		return
 	end
 
@@ -216,6 +285,7 @@ function Controller:UpdateFishVisual1(fishId)
 			self.Hotbar.FishSlot1.Visible = true
 			self.Hotbar.FishSlot1.BackgroundTransparency = 1
 		end
+		self:RefreshHotbarHighlights()
 		return
 	end
 
@@ -231,6 +301,7 @@ function Controller:UpdateFishVisual1(fishId)
 			self.Hotbar.FishSlot1.ImageColor3 = Color3.fromRGB(255, 255, 255)
 		end
 	end
+	self:RefreshHotbarHighlights()
 end
 
 -- Visual for Slot 5: Fish 2
@@ -244,6 +315,7 @@ function Controller:UpdateFishVisual2(fishId)
 			self.Hotbar.FishSlot2.ImageColor3 = Color3.fromRGB(255, 255, 255)
 			self.Hotbar.FishSlot2.BackgroundTransparency = 1
 		end
+		self:RefreshHotbarHighlights()
 		return
 	end
 
@@ -284,6 +356,7 @@ function Controller:UpdateFishVisual2(fishId)
 			self.Hotbar.FishSlot2.Visible = true
 			self.Hotbar.FishSlot2.BackgroundTransparency = 1
 		end
+		self:RefreshHotbarHighlights()
 		return
 	end
 
@@ -299,6 +372,7 @@ function Controller:UpdateFishVisual2(fishId)
 			self.Hotbar.FishSlot2.ImageColor3 = Color3.fromRGB(255, 255, 255)
 		end
 	end
+	self:RefreshHotbarHighlights()
 end
 
 -- ===================================================================
@@ -317,6 +391,7 @@ function Controller:RestoreHotbarState()
 	self:UpdateToolVisual2(self.lastEquippedToolName2)
 	self:UpdateFishVisual1(self.lastEquippedFishId1)
 	self:UpdateFishVisual2(self.lastEquippedFishId2)
+	self:RefreshHotbarHighlights()
 end
 
 function Controller:ValidateHotbarItems()
@@ -474,6 +549,7 @@ function Controller:AutoFillHotbarSlots()
 		end
 	end
 
+	self:RefreshHotbarHighlights()
 	self:SaveHotbarState()
 end
 

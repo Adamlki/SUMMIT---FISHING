@@ -1,5 +1,8 @@
 local Module = {}
 
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RewardPopup = require(ReplicatedStorage:WaitForChild("Shared"):WaitForChild("UI"):WaitForChild("RewardPopup"))
+
 function Module.Install(Controller)
 -- ===================================================================
 -- DATA SYNC ENGINE
@@ -40,8 +43,17 @@ function Controller:ConnectSyncEvents()
 		end)
 	end)
 
-	self.rePurchaseSuccess.OnClientEvent:Connect(function()
+	self.rePurchaseSuccess.OnClientEvent:Connect(function(data)
 		self:PlaySound(self.SOUNDS.Purchase, 0.45)
+		local itemName = type(data) == "table" and data.Name or nil
+		if itemName then
+			local tool = self.rodAssets and self.rodAssets:FindFirstChild(itemName)
+			RewardPopup.show({
+				Title = "PURCHASED!",
+				ItemName = itemName,
+				Icon = tool and tool:IsA("Tool") and tool.TextureId or nil,
+			})
+		end
 		self:RefreshData()
 	end)
 

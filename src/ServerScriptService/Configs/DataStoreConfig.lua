@@ -13,6 +13,7 @@ local DataStoreConfig = {
 		AdminJailProfiles = "AdminJailProfiles",
 		CheckpointProgress = "CheckpointProgress",
 		PlaytimeData = "PlaytimeData",
+		SpinData = "SpinData",
 		ShopToolsData = "ShopToolsData",
 		SpeedrunData = "SpeedrunData",
 		VipData = "VipData",

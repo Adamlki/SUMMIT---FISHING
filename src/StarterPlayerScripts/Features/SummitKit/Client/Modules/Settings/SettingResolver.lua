@@ -11,9 +11,10 @@ function SettingResolver.Resolve(playerGui)
         return false, "Component or Menus missing"
     end
 
-    local buttons = component:FindFirstChild("Buttons")
-    local topMid = buttons and buttons:FindFirstChild("TopMid")
-    local toggleBtn = topMid and topMid:FindFirstChild("Setting")
+    local buttons = component:FindFirstChild("ButtonsNew")
+    local menuKiri = buttons and buttons:FindFirstChild("MenuKiri")
+    local frameBtn = menuKiri and menuKiri:FindFirstChild("FrameBtn")
+    local toggleBtn = frameBtn and frameBtn:FindFirstChild("SettingButton")
     if toggleBtn and not toggleBtn:IsA("GuiButton") then
         warn("[SettingResolver] Expected Setting toggle as ImageButton/TextButton, got " .. toggleBtn.ClassName)
     end
@@ -80,7 +81,7 @@ function SettingResolver.Resolve(playerGui)
         },
     }
 
-    if not refs.ToggleBtn or not refs.Menu or not refs.Close then
+    if not refs.Menu or not refs.Close then
         return false, "Setting menu structure incomplete"
     end
 

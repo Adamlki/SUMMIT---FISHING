@@ -35,9 +35,9 @@ function Resolver.Resolve(playerGui)
         return false, "GameUI.Component or GameUI.Menus not found"
     end
 
-    local buttons = component and component:FindFirstChild("Buttons")
-    local adminRight = buttons and buttons:FindFirstChild("AdminRight")
-    local toggle = adminRight and adminRight:FindFirstChild("Title")
+    local buttons = component and component:FindFirstChild("ButtonsNew")
+    local menuKanan = buttons and buttons:FindFirstChild("MenuKanan")
+    local toggle = menuKanan and menuKanan:FindFirstChild("TitleButton")
     local titleMenu = menus and (menus:FindFirstChild("Title") or menus:WaitForChild("Title", 20))
     if not titleMenu then
         return false, "Title menu not found"

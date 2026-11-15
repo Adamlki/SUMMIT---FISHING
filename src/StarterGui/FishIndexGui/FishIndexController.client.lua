@@ -91,8 +91,6 @@ function Controller.new()
 
 	self.INDEX_SHOWN_POS = UDim2.new(0.5, 0, 0.5, 0)
 	self.INDEX_HIDDEN_POS = UDim2.new(0.5, 0, -0.6, 0)
-	self.indexTween = nil
-	self.indexTweenId = 0
 	self.lastToggleTime = 0
 
 	self.caughtData = {}

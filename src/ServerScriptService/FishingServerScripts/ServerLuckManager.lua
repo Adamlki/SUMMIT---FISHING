@@ -27,8 +27,7 @@ local function ensureTimerRunning()
     end)
 end
 
-function ServerLuckManager.ProcessReceipt(receiptInfo: { PlayerId: number, ProductId: number }): Enum.ProductPurchaseDecision
-    local player = Players:GetPlayerByUserId(receiptInfo.PlayerId)
+function ServerLuckManager.ProcessReceipt(receiptInfo: { PlayerId: number, ProductId: number }): Enum.ProductPurchaseDecision    local player = Players:GetPlayerByUserId(receiptInfo.PlayerId)
     local cfg = StoreConfig.ServerLuckBoost
     local addSeconds = cfg.DurationSeconds or 1800
 

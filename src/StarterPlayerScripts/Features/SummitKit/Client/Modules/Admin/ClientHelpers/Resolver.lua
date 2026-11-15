@@ -27,9 +27,9 @@ function AdminResolver.Resolve(playerGui)
 		return false, "Component/Menus missing"
 	end
 
-	local buttons = component:FindFirstChild("Buttons")
-	local adminRight = buttons and buttons:FindFirstChild("AdminRight")
-	local toggleBtn = findButton(adminRight and adminRight:FindFirstChild("Panel"))
+	local buttons = component:FindFirstChild("ButtonsNew")
+	local menuKanan = buttons and buttons:FindFirstChild("MenuKanan")
+	local toggleBtn = findButton(menuKanan and menuKanan:FindFirstChild("AdminButton"))
 
 	local adminMenu = menus:FindFirstChild("Admin")
 	local panel = adminMenu and adminMenu:FindFirstChild("Panel")
@@ -71,7 +71,7 @@ function AdminResolver.Resolve(playerGui)
 		},
 	}
 
-	if not (refs.Toggle and refs.Root and left and right) then
+	if not (refs.Root and left and right) then
 		return false, "Admin panel structure incomplete"
 	end
 

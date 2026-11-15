@@ -1,5 +1,7 @@
 local Module = {}
 local MonetizationConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("Configs"):WaitForChild("MonetizationConfig"))
+local RewardPopup = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("UI"):WaitForChild("RewardPopup"))
+local UIEffects = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("UI"):WaitForChild("UIEffects"))
 
 function Module.Install(Controller)
 function Controller:FormatK(num: number): string
@@ -207,6 +209,8 @@ function Controller:RenderRodsCatalogImmediate()
 					self.NetworkGateway:Request("POST", "/shop/buy-rod", { RodName = rod.Name }):andThen(function(res)
 						if res.Success then
 							self:RefreshData()
+						else
+							UIEffects.warning(coinBtn, res.Message or "NOT ENOUGH COINS!")
 						end
 					end)
 				end)
@@ -314,7 +318,10 @@ function Controller:RenderTrailsCatalog()
 							end
 							self.equippedTrail = (data and data.Equipped) or trail.Id
 							self:PlaySound(self.SOUNDS.Purchase, 0.45)
+							RewardPopup.show({ Title = "PURCHASED!", ItemName = trail.Name })
 							self:RenderTrailsCatalog()
+						else
+							UIEffects.warning(coinBtn, type(res) == "table" and res.Message or "NOT ENOUGH COINS!")
 						end
 					end
 				end)
@@ -333,6 +340,7 @@ function Controller:RenderTrailsCatalog()
 						end
 						self.equippedTrail = trail.Id
 						self:PlaySound(self.SOUNDS.Purchase, 0.45)
+						RewardPopup.show({ Title = "PURCHASED!", ItemName = trail.Name })
 						self:RenderTrailsCatalog()
 					end
 				end)

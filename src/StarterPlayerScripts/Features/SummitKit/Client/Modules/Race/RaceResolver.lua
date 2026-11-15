@@ -35,8 +35,8 @@ function RaceResolver.resolve(playerGui)
     local gameUI = playerGui and (playerGui:FindFirstChild("GameUI") or waitForChild(playerGui, "GameUI", 30)) or nil
     local component = gameUI and (gameUI:FindFirstChild("Component") or waitForChild(gameUI, "Component", 10)) or nil
     local menus = gameUI and (gameUI:FindFirstChild("Menus") or waitForChild(gameUI, "Menus", 10)) or nil
-    local buttons = component and (component:FindFirstChild("Buttons") or waitForChild(component, "Buttons", 10)) or nil
-    local adminRight = buttons and (buttons:FindFirstChild("AdminRight") or waitForChild(buttons, "AdminRight", 10)) or nil
+    local buttons = component and (component:FindFirstChild("ButtonsNew") or waitForChild(component, "ButtonsNew", 10)) or nil
+    local adminRight = buttons and (buttons:FindFirstChild("MenuKanan") or waitForChild(buttons, "MenuKanan", 10)) or nil
     local root = menus and (menus:FindFirstChild("Race") or waitForChild(menus, "Race", 10)) or nil
     local toggle = adminRight and (adminRight:FindFirstChild("Race") or findFirstDescendant(adminRight, "Race") or waitForChild(adminRight, "Race", 10)) or nil
     local panel = findPath(root, { "Panel" })

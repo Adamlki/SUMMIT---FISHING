@@ -75,8 +75,6 @@ function Controller.new()
 	self.currentGiftId = ""
 
 	self.boundButtons = {}
-	self.shopTween = nil
-	self.shopTweenId = 0
 	self.SHOP_SHOWN_POS = UDim2.new(0.5, 0, 0.5, 0)
 	self.SHOP_HIDDEN_POS = UDim2.new(0.5, 0, -0.6, 0)
 
@@ -111,5 +109,7 @@ controller.shopFeature.AnchorPoint = Vector2.new(0.5, 0.5)
 controller.shopFeature.Position = controller.SHOP_HIDDEN_POS
 controller.shopFeature.Visible = false
 controller.shopFeature:SetAttribute("IsOpen", false)
+controller.shopFeature:SetAttribute("ShownPos", controller.SHOP_SHOWN_POS)
+controller.shopFeature:SetAttribute("HiddenPos", controller.SHOP_HIDDEN_POS)
 
 print("✅ [ShopFeatureController] 3D Rod Viewports, Backpack Rod Ownership, and VIP Rod integration active!")

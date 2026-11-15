@@ -6,6 +6,11 @@ function Module.Install(Controller)
 -- ===================================================================
 
 function Controller:PopulateFishGrid()
+	if not self.Templates.Item then
+		warn("[CustomInventory] ItemTemplate not found in CustomInventoryGui.Templates")
+		return
+	end
+
 	for _, child in ipairs(self.Inventory.FishContent:GetChildren()) do
 		if child:IsA("Frame") or child:IsA("ImageButton") then
 			child:Destroy()
@@ -32,45 +37,63 @@ function Controller:PopulateFishGrid()
 	end)
 
 	for _, fishData in ipairs(self.allFishData) do
-		local card = self.Templates.Fish:Clone()
+		local card = self.Templates.Item:Clone()
 		card.Name = fishData.uniqueId
 		card.Visible = true
+		card:SetAttribute("HotbarType", "Fish")
+		card:SetAttribute("HotbarId", fishData.uniqueId)
 
-		local fishImage = card:FindFirstChild("FishImage")
-		local fishName = card:FindFirstChild("FishName")
-		local fishWeight = card:FindFirstChild("FishWeight")
-		local fishRarity = card:FindFirstChild("FishRarity")
+		local itemImage = card:FindFirstChild("ItemImage")
+		local itemIcon = itemImage and itemImage:FindFirstChild("ItemIcon")
+		local itemName = card:FindFirstChild("ItemName")
+		local itemInfo = card:FindFirstChild("ItemInfo")
+		local itemRarity = card:FindFirstChild("ItemRarity")
 		local favoriteButton = card:FindFirstChild("FavoriteButton")
-		local uiStroke = card:FindFirstChildOfClass("UIStroke") or (fishImage and fishImage:FindFirstChildOfClass("UIStroke"))
+		local clickArea = card:FindFirstChild("ClickArea")
+		local badge = card:FindFirstChild("Badge")
+		local uiStroke = card:FindFirstChildOfClass("UIStroke") or (itemImage and itemImage:FindFirstChildOfClass("UIStroke"))
 
-		if not fishImage or not fishName or not fishWeight or not fishRarity or not favoriteButton then
+		if not itemImage or not itemName or not itemInfo or not itemRarity or not favoriteButton or not clickArea then
 			card:Destroy()
 			continue
 		end
 
-		local fishViewport = fishImage:FindFirstChild("FishViewport")
-		if not fishViewport then
-			fishViewport = Instance.new("ViewportFrame")
-			fishViewport.Name = "FishViewport"
-			fishViewport.Size = UDim2.new(1, 0, 1, 0)
-			fishViewport.Position = UDim2.new(0, 0, 0, 0)
-			fishViewport.BackgroundTransparency = 1
-			fishViewport.BorderSizePixel = 0
-			fishViewport.ZIndex = fishImage.ZIndex + 1
-			fishViewport.Parent = fishImage
+		if badge then badge.Visible = false end
+		favoriteButton.Visible = true
+		itemRarity.Visible = true
+		if itemIcon then
+			itemIcon.Image = ""
+			itemIcon.Visible = false
 		end
 
-		fishImage.Image = ""
-		fishViewport.Visible = true
-		self:SetupFishViewport(fishViewport, fishData.name)
+		local itemViewport = itemImage:FindFirstChild("ItemViewport")
+		if not itemViewport then
+			itemViewport = Instance.new("ViewportFrame")
+			itemViewport.Name = "ItemViewport"
+			itemViewport.Size = UDim2.new(1, 0, 1, 0)
+			itemViewport.Position = UDim2.new(0, 0, 0, 0)
+			itemViewport.BackgroundTransparency = 1
+			itemViewport.BorderSizePixel = 0
+			itemViewport.ZIndex = itemImage.ZIndex + 1
+			itemViewport.Parent = itemImage
+		end
 
+		itemViewport.Visible = true
+		self:SetupFishViewport(itemViewport, fishData.name)
 		local rarityColor = self:GetRarityColor(fishData.rarity)
-		if uiStroke then uiStroke.Color = rarityColor end
+		local mutationName = fishData.mutation
+		local mutationColor = mutationName and mutationName ~= "" and self.FishingConfig.GetMutationColor(mutationName) or nil
+		if uiStroke then uiStroke.Color = mutationColor or rarityColor end
 
-		fishName.Text = fishData.name
-		fishWeight.Text = string.format("%.1fkg", fishData.weight)
-		fishRarity.Text = fishData.rarity
-		fishRarity.TextColor3 = rarityColor
+		itemName.Text = fishData.name
+		itemInfo.Text = string.format("%.1fkg", fishData.weight)
+		if mutationName and mutationName ~= "" then
+			itemRarity.Text = string.format("%s %s", mutationName, fishData.rarity)
+			itemRarity.TextColor3 = mutationColor
+		else
+			itemRarity.Text = fishData.rarity
+			itemRarity.TextColor3 = rarityColor
+		end
 
 		if fishData.isFavorited then
 			favoriteButton.Text = "⭐"
@@ -97,7 +120,7 @@ function Controller:PopulateFishGrid()
 		end)
 
 		-- Klik Ikan di Tas: Assign ke Slot 5 atau Slot 6
-		fishImage.MouseButton1Click:Connect(function()
+		clickArea.MouseButton1Click:Connect(function()
 			self:PlayClickSound()
 			local equippedFishId = fishData.uniqueId
 			local targetFishId = nil
@@ -138,9 +161,16 @@ function Controller:PopulateFishGrid()
 	end
 
 	self:UpdateFishCount()
+	self:UpdateEmptyState()
+	self:RefreshCardHighlights()
 end
 
 function Controller:PopulateRodGrid()
+	if not self.Templates.Item then
+		warn("[CustomInventory] ItemTemplate not found in CustomInventoryGui.Templates")
+		return
+	end
+
 	for _, child in ipairs(self.Inventory.RodContent:GetChildren()) do
 		if child:IsA("Frame") or child:IsA("ImageButton") then
 			child:Destroy()
@@ -158,18 +188,32 @@ function Controller:PopulateRodGrid()
 	end)
 
 	for _, rodName in ipairs(self.allRodData) do
-		local card = self.Templates.Rod:Clone()
+		local card = self.Templates.Item:Clone()
 		card.Name = rodName
 		card.Visible = true
+		card:SetAttribute("HotbarType", "Rod")
+		card:SetAttribute("HotbarId", rodName)
 
-		local rodNameLabel = card:FindFirstChild("RodName")
-		local rodImage = card:FindFirstChild("RodImage")
-		local statsLabel = card:FindFirstChild("StatsLabel")
-		local equipButton = card:FindFirstChild("EquipButton")
+		local itemName = card:FindFirstChild("ItemName")
+		local itemImage = card:FindFirstChild("ItemImage")
+		local itemIcon = itemImage and itemImage:FindFirstChild("ItemIcon")
+		local itemInfo = card:FindFirstChild("ItemInfo")
+		local itemRarity = card:FindFirstChild("ItemRarity")
+		local favoriteButton = card:FindFirstChild("FavoriteButton")
+		local clickArea = card:FindFirstChild("ClickArea")
+		local badge = card:FindFirstChild("Badge")
 
-		if not rodNameLabel or not rodImage or not statsLabel or not equipButton then
+		if not itemName or not itemImage or not itemInfo or not clickArea then
 			card:Destroy()
 			continue
+		end
+
+		if favoriteButton then favoriteButton.Visible = false end
+		if itemRarity then itemRarity.Visible = false end
+		if badge then badge.Visible = false end
+		if itemIcon then
+			itemIcon.Image = ""
+			itemIcon.Visible = false
 		end
 
 		local cachedData = self.rodToolStats[rodName]
@@ -180,21 +224,20 @@ function Controller:PopulateRodGrid()
 			textureId = "rbxassetid://" .. textureId
 		end
 
-		rodNameLabel.Text = rodName
-		rodImage.Image = ""
-		local rodViewport = rodImage:FindFirstChild("RodViewport")
-		if not rodViewport then
-			rodViewport = Instance.new("ViewportFrame")
-			rodViewport.Name = "RodViewport"
-			rodViewport.Size = UDim2.new(1, 0, 1, 0)
-			rodViewport.Position = UDim2.new(0, 0, 0, 0)
-			rodViewport.BackgroundTransparency = 1
-			rodViewport.BorderSizePixel = 0
-			rodViewport.Active = false
-			rodViewport.ZIndex = rodImage.ZIndex + 1
-			rodViewport.Parent = rodImage
+		itemName.Text = rodName
+		local itemViewport = itemImage:FindFirstChild("ItemViewport")
+		if not itemViewport then
+			itemViewport = Instance.new("ViewportFrame")
+			itemViewport.Name = "ItemViewport"
+			itemViewport.Size = UDim2.new(1, 0, 1, 0)
+			itemViewport.Position = UDim2.new(0, 0, 0, 0)
+			itemViewport.BackgroundTransparency = 1
+			itemViewport.BorderSizePixel = 0
+			itemViewport.Active = false
+			itemViewport.ZIndex = itemImage.ZIndex + 1
+			itemViewport.Parent = itemImage
 		end
-		self:SetupRodViewport(rodViewport, rodName)
+		self:SetupRodViewport(itemViewport, rodName)
 
 		local baseLuck = stats.baseLuck or 1.0
 		local finalLuck = baseLuck * currentMultiplier
@@ -203,14 +246,14 @@ function Controller:PopulateRodGrid()
 		local luckPercentage = roundedLuck * 100
 
 		if currentMultiplier > 1 then
-			statsLabel.RichText = true
-			statsLabel.Text = string.format("Luck: <font color='#00FF00'><b>%d%%</b></font>\nWeight: %dkg", luckPercentage, weight)
+			itemInfo.RichText = true
+			itemInfo.Text = string.format("Luck: <font color='#00FF00'><b>%d%%</b></font>\nWeight: %dkg", luckPercentage, weight)
 		else
-			statsLabel.RichText = false
-			statsLabel.Text = string.format("Luck: %d%%\nWeight: %dkg", luckPercentage, weight)
+			itemInfo.RichText = false
+			itemInfo.Text = string.format("Luck: %d%%\nWeight: %dkg", luckPercentage, weight)
 		end
 
-		equipButton.MouseButton1Click:Connect(function()
+		clickArea.MouseButton1Click:Connect(function()
 			self:PlayClickSound()
 			self.lastEquippedRodName = rodName
 			self:SaveHotbarState()
@@ -220,9 +263,17 @@ function Controller:PopulateRodGrid()
 
 		card.Parent = self.Inventory.RodContent
 	end
+
+	self:UpdateEmptyState()
+	self:RefreshCardHighlights()
 end
 
 function Controller:PopulateToolGrid()
+	if not self.Templates.Item then
+		warn("[CustomInventory] ItemTemplate not found in CustomInventoryGui.Templates")
+		return
+	end
+
 	for _, child in ipairs(self.Inventory.ToolContent:GetChildren()) do
 		if child:IsA("Frame") or child:IsA("ImageButton") then
 			child:Destroy()
@@ -231,6 +282,9 @@ function Controller:PopulateToolGrid()
 
 	local genericTools = {}
 	local addedTools = {}
+	-- VIP players keep access to their VIP tools through the Tools tab;
+	-- admins get them in the Admin tab instead.
+	local includeVIPTools = self.isVIP and not self.isAdmin
 
 	local function isExcludedTool(toolName)
 		for _, r in pairs(self.RoleConfig.Roles) do
@@ -250,7 +304,7 @@ function Controller:PopulateToolGrid()
 		local isVIPTool = self.CollectionService:HasTag(tool, "VIPTool")
 		local isRoleTool = isExcludedTool(tool.Name)
 
-		if not isFish and not isRod and not isVIPTool and not isRoleTool and not addedTools[tool.Name] then
+		if not isFish and not isRod and (not isVIPTool or includeVIPTools) and not isRoleTool and not addedTools[tool.Name] then
 			table.insert(genericTools, tool)
 			addedTools[tool.Name] = true
 		end
@@ -264,7 +318,7 @@ function Controller:PopulateToolGrid()
 		local isVIPTool = self.CollectionService:HasTag(tool, "VIPTool")
 		local isRoleTool = isExcludedTool(tool.Name)
 
-		if not isFish and not isRod and not isVIPTool and not isRoleTool and not addedTools[tool.Name] then
+		if not isFish and not isRod and (not isVIPTool or includeVIPTools) and not isRoleTool and not addedTools[tool.Name] then
 			table.insert(genericTools, tool)
 			addedTools[tool.Name] = true
 		end
@@ -275,30 +329,43 @@ function Controller:PopulateToolGrid()
 	end)
 
 	for _, tool in ipairs(genericTools) do
-		local card = self.Templates.Tool:Clone()
+		local card = self.Templates.Item:Clone()
 		card.Name = tool.Name
 		card.Visible = true
+		card:SetAttribute("HotbarType", "Tool")
+		card:SetAttribute("HotbarId", tool.Name)
 
-		local toolImage = card:FindFirstChild("ToolImage")
-		local toolNameLabel = card:FindFirstChild("ToolName")
+		local itemImage = card:FindFirstChild("ItemImage")
+		local itemIcon = itemImage and itemImage:FindFirstChild("ItemIcon")
+		local itemName = card:FindFirstChild("ItemName")
+		local itemInfo = card:FindFirstChild("ItemInfo")
+		local itemRarity = card:FindFirstChild("ItemRarity")
+		local favoriteButton = card:FindFirstChild("FavoriteButton")
+		local clickArea = card:FindFirstChild("ClickArea")
+		local badge = card:FindFirstChild("Badge")
 
-		if not toolImage or not toolNameLabel then
+		if not itemImage or not itemIcon or not itemName or not itemInfo or not clickArea then
 			card:Destroy()
 			continue
 		end
 
-		toolNameLabel.Text = tool.Name
-		local toolViewport = toolImage:FindFirstChild("ToolViewport")
-		if not toolViewport then
-			toolViewport = Instance.new("ViewportFrame")
-			toolViewport.Name = "ToolViewport"
-			toolViewport.Size = UDim2.new(1, 0, 1, 0)
-			toolViewport.Position = UDim2.new(0, 0, 0, 0)
-			toolViewport.BackgroundTransparency = 1
-			toolViewport.BorderSizePixel = 0
-			toolViewport.Active = false
-			toolViewport.ZIndex = toolImage.ZIndex + 1
-			toolViewport.Parent = toolImage
+		if itemRarity then itemRarity.Visible = false end
+		if favoriteButton then favoriteButton.Visible = false end
+		if badge then badge.Visible = false end
+
+		itemName.Text = tool.Name
+		itemInfo.Text = "Tool"
+		local itemViewport = itemImage:FindFirstChild("ItemViewport")
+		if not itemViewport then
+			itemViewport = Instance.new("ViewportFrame")
+			itemViewport.Name = "ItemViewport"
+			itemViewport.Size = UDim2.new(1, 0, 1, 0)
+			itemViewport.Position = UDim2.new(0, 0, 0, 0)
+			itemViewport.BackgroundTransparency = 1
+			itemViewport.BorderSizePixel = 0
+			itemViewport.Active = false
+			itemViewport.ZIndex = itemImage.ZIndex + 1
+			itemViewport.Parent = itemImage
 		end
 
 		local icon = ""
@@ -310,35 +377,40 @@ function Controller:PopulateToolGrid()
 			if not icon:match("rbxassetid") and not icon:match("http") then
 				icon = "rbxassetid://" .. icon
 			end
-			toolImage.Image = icon
-			toolImage.ImageTransparency = 0
-			toolViewport.Visible = false
+			itemIcon.Image = icon
+			itemIcon.ImageTransparency = 0
+			itemIcon.Visible = true
+			itemViewport.Visible = false
 		else
-			toolImage.Image = ""
-			toolViewport.Visible = true
-			self:SetupToolViewport(toolViewport, tool.Name)
+			itemIcon.Image = ""
+			itemIcon.Visible = false
+			itemViewport.Visible = true
+			self:SetupToolViewport(itemViewport, tool.Name)
 		end
 
-		toolImage.MouseButton1Click:Connect(function()
+		clickArea.MouseButton1Click:Connect(function()
 			self:OnAnyToolSelected(tool.Name)
 		end)
 
 		card.Parent = self.Inventory.ToolContent
 	end
+
+	self:UpdateEmptyState()
+	self:RefreshCardHighlights()
 end
 
 -- ===================================================================
--- VIP TOOLS POPULATION
+-- ADMIN / ROLE TOOLS POPULATION
 -- ===================================================================
-function Controller:PopulateVIPToolGrid()
-	if not self.isVIP then return end
-	if not self.Inventory.VIPContent then return end
-	if not self.Templates.VIPTool then
-		warn("[CustomInventory] VIPToolTemplate not found!")
+function Controller:PopulateAdminToolGrid()
+	if not self.isAdmin then return end
+	if not self.Inventory.AdminContent then return end
+	if not self.Templates.Item then
+		warn("[CustomInventory] ItemTemplate not found in CustomInventoryGui.Templates")
 		return
 	end
 
-	for _, child in ipairs(self.Inventory.VIPContent:GetChildren()) do
+	for _, child in ipairs(self.Inventory.AdminContent:GetChildren()) do
 		if child:IsA("Frame") or child:IsA("ImageButton") then
 			child:Destroy()
 		end
@@ -396,31 +468,43 @@ function Controller:PopulateVIPToolGrid()
 	end)
 
 	for _, toolData in ipairs(vipTools) do
-		local card = self.Templates.VIPTool:Clone()
+		local card = self.Templates.Item:Clone()
 		card.Name = toolData.Name
 		card.Visible = true
+		local hotbarType = self:IsRodName(toolData.Name) and "Rod" or "Tool"
+		card:SetAttribute("HotbarType", hotbarType)
+		card:SetAttribute("HotbarId", toolData.Name)
 
-		local toolImage = card:FindFirstChild("ToolImage")
-		local toolNameLabel = card:FindFirstChild("ToolName")
-		local vipBadge = card:FindFirstChild("VIPBadge")
+		local itemImage = card:FindFirstChild("ItemImage")
+		local itemIcon = itemImage and itemImage:FindFirstChild("ItemIcon")
+		local itemName = card:FindFirstChild("ItemName")
+		local itemInfo = card:FindFirstChild("ItemInfo")
+		local itemRarity = card:FindFirstChild("ItemRarity")
+		local favoriteButton = card:FindFirstChild("FavoriteButton")
+		local clickArea = card:FindFirstChild("ClickArea")
+		local badge = card:FindFirstChild("Badge")
 
-		if not toolImage or not toolNameLabel then
+		if not itemImage or not itemIcon or not itemName or not itemInfo or not clickArea then
 			card:Destroy()
 			continue
 		end
 
-		toolNameLabel.Text = toolData.Name
-		local toolViewport = toolImage:FindFirstChild("ToolViewport")
-		if not toolViewport then
-			toolViewport = Instance.new("ViewportFrame")
-			toolViewport.Name = "ToolViewport"
-			toolViewport.Size = UDim2.new(1, 0, 1, 0)
-			toolViewport.Position = UDim2.new(0, 0, 0, 0)
-			toolViewport.BackgroundTransparency = 1
-			toolViewport.BorderSizePixel = 0
-			toolViewport.Active = false
-			toolViewport.ZIndex = toolImage.ZIndex + 1
-			toolViewport.Parent = toolImage
+		if itemRarity then itemRarity.Visible = false end
+		if favoriteButton then favoriteButton.Visible = false end
+
+		itemName.Text = toolData.Name
+		itemInfo.Text = "Admin Tool"
+		local itemViewport = itemImage:FindFirstChild("ItemViewport")
+		if not itemViewport then
+			itemViewport = Instance.new("ViewportFrame")
+			itemViewport.Name = "ItemViewport"
+			itemViewport.Size = UDim2.new(1, 0, 1, 0)
+			itemViewport.Position = UDim2.new(0, 0, 0, 0)
+			itemViewport.BackgroundTransparency = 1
+			itemViewport.BorderSizePixel = 0
+			itemViewport.Active = false
+			itemViewport.ZIndex = itemImage.ZIndex + 1
+			itemViewport.Parent = itemImage
 		end
 
 		local icon = toolData.TextureId or ""
@@ -428,34 +512,40 @@ function Controller:PopulateVIPToolGrid()
 			if not icon:match("rbxassetid") and not icon:match("http") then
 				icon = "rbxassetid://" .. icon
 			end
-			toolImage.Image = icon
-			toolImage.ImageTransparency = 0
-			toolViewport.Visible = false
+			itemIcon.Image = icon
+			itemIcon.ImageTransparency = 0
+			itemIcon.Visible = true
+			itemViewport.Visible = false
 		else
-			toolImage.Image = ""
-			toolViewport.Visible = true
-			self:SetupToolViewport(toolViewport, toolData.Name)
+			itemIcon.Image = ""
+			itemIcon.Visible = false
+			itemViewport.Visible = true
+			self:SetupToolViewport(itemViewport, toolData.Name)
 		end
 
-		if vipBadge then
+		if badge then
+			badge.Visible = true
 			if self.RoleConfig.IsOwner(self.player) then
-				vipBadge.Text = "👑 OWNER"
-				vipBadge.TextColor3 = Color3.fromRGB(255, 215, 0)
+				badge.Text = "OWNER"
+				badge.TextColor3 = Color3.fromRGB(255, 215, 0)
 			elseif self.RoleConfig.IsAdmin(self.player) then
-				vipBadge.Text = "🛡️ ADMIN"
-				vipBadge.TextColor3 = Color3.fromRGB(255, 80, 80)
+				badge.Text = "ADMIN"
+				badge.TextColor3 = Color3.fromRGB(255, 255, 255)
 			else
-				vipBadge.Text = "⭐ VIP"
-				vipBadge.TextColor3 = Color3.fromRGB(255, 215, 0)
+				badge.Text = "VIP"
+				badge.TextColor3 = Color3.fromRGB(255, 215, 0)
 			end
 		end
 
-		toolImage.MouseButton1Click:Connect(function()
+		clickArea.MouseButton1Click:Connect(function()
 			self:OnAnyToolSelected(toolData.Name)
 		end)
 
-		card.Parent = self.Inventory.VIPContent
+		card.Parent = self.Inventory.AdminContent
 	end
+
+	self:UpdateEmptyState()
+	self:RefreshCardHighlights()
 end
 end
 

@@ -1,5 +1,6 @@
 local Module = {}
 local RoleConfig = require(game:GetService("ReplicatedStorage"):WaitForChild("Configs"):WaitForChild("RoleConfig"))
+local HudVisibility = require(game:GetService("ReplicatedStorage"):WaitForChild("Shared"):WaitForChild("UI"):WaitForChild("HudVisibility"))
 
 function Module.Install(Controller)
 function Controller:PlayClickSound()
@@ -107,6 +108,11 @@ function Controller:UpdateGUIReferences()
 
 	self.Inventory.Frame = mainFrame
 
+	-- Buka/tutup lewat backdrop (Panel.closeAll) juga harus menyelaraskan state.
+	mainFrame:GetAttributeChangedSignal("IsOpen"):Connect(function()
+		self.isInventoryOpen = mainFrame:GetAttribute("IsOpen") == true
+	end)
+
 	local headerFrame = mainFrame:FindFirstChild("Header")
 	self.Inventory.CloseButton = headerFrame and headerFrame:FindFirstChild("CloseButton")
 
@@ -114,13 +120,14 @@ function Controller:UpdateGUIReferences()
 	self.Inventory.FishTabButton = tabsFrame and tabsFrame:FindFirstChild("FishTabButton")
 	self.Inventory.RodTabButton = tabsFrame and tabsFrame:FindFirstChild("RodTabButton")
 	self.Inventory.ToolTabButton = tabsFrame and tabsFrame:FindFirstChild("ToolTabButton")
-	self.Inventory.VIPTabButton = tabsFrame and tabsFrame:FindFirstChild("VIPTabButton")
+	self.Inventory.AdminTabButton = tabsFrame and tabsFrame:FindFirstChild("AdminTabButton")
 
 	local contentFrame = mainFrame:FindFirstChild("ContentFrame")
 	self.Inventory.FishContent = contentFrame and contentFrame:FindFirstChild("FishContent")
 	self.Inventory.RodContent = contentFrame and contentFrame:FindFirstChild("RodContent")
 	self.Inventory.ToolContent = contentFrame and contentFrame:FindFirstChild("ToolContent")
-	self.Inventory.VIPContent = contentFrame and contentFrame:FindFirstChild("VIPContent")
+	self.Inventory.AdminContent = contentFrame and contentFrame:FindFirstChild("AdminContent")
+	self.Inventory.EmptyState = contentFrame and contentFrame:FindFirstChild("EmptyState")
 
 	local footerFrame = mainFrame:FindFirstChild("Footer")
 	self.Inventory.SellAllButton = footerFrame and footerFrame:FindFirstChild("SellAllButton")
@@ -128,13 +135,14 @@ function Controller:UpdateGUIReferences()
 
 	local templatesFolder = self.gui:FindFirstChild("Templates")
 	if templatesFolder then
-		self.Templates.Fish = templatesFolder:FindFirstChild("FishTemplate")
-		self.Templates.Tool = templatesFolder:FindFirstChild("ToolTemplate")
-		self.Templates.Rod = templatesFolder:FindFirstChild("RodTemplate")
-		self.Templates.VIPTool = templatesFolder:FindFirstChild("VIPToolTemplate")
+		self.Templates.Item = templatesFolder:FindFirstChild("ItemTemplate")
 	end
 
-	self.Hotbar.Frame.Visible = true
+	local highlightOutline = self.Templates.Item and self.Templates.Item:FindFirstChild("HotbarOutline")
+	local highlightStroke = highlightOutline and highlightOutline:FindFirstChildOfClass("UIStroke")
+	self.HotbarHighlightColor = highlightStroke and highlightStroke.Color or Color3.fromRGB(57, 255, 20)
+
+	HudVisibility:SetHotbarDesired(true)
 	return true
 end
 
@@ -152,6 +160,74 @@ function Controller:UpdateFishCount()
 		local maxFish = self.FishingConfig.InventoryLimitSettings.maxFishInventory or 500
 		self.Inventory.FishCountLabel.Text = string.format("%d/%d", fishCount, maxFish)
 	end
+end
+
+function Controller:UpdateEmptyState()
+	local label = self.Inventory.EmptyState
+	if not label then return end
+
+	local content = nil
+	if self.currentTab == "Fish" then
+		content = self.Inventory.FishContent
+	elseif self.currentTab == "Rods" then
+		content = self.Inventory.RodContent
+	elseif self.currentTab == "Tools" then
+		content = self.Inventory.ToolContent
+	elseif self.currentTab == "Admin" then
+		content = self.Inventory.AdminContent
+	end
+
+	if not content or not content.Visible then
+		label.Visible = false
+		return
+	end
+
+	for _, child in ipairs(content:GetChildren()) do
+		if child:IsA("Frame") or child:IsA("ImageButton") then
+			label.Visible = false
+			return
+		end
+	end
+	label.Visible = true
+end
+
+function Controller:SetCardHotbarHighlight(card, active)
+	local outline = card and card:FindFirstChild("HotbarOutline")
+	if outline then
+		outline.Visible = active
+	end
+end
+
+function Controller:RefreshCardHighlights()
+	local fish1, fish2 = self.lastEquippedFishId1, self.lastEquippedFishId2
+	local rodName = self.lastEquippedRodName
+	local tool1, tool2 = self.lastEquippedToolName1, self.lastEquippedToolName2
+
+	local function refreshContent(content)
+		if not content then return end
+		for _, card in ipairs(content:GetChildren()) do
+			if card:IsA("Frame") then
+				local kind = card:GetAttribute("HotbarType")
+				local id = card:GetAttribute("HotbarId")
+				local active = false
+				if id ~= nil then
+					if kind == "Fish" then
+						active = (id == fish1 or id == fish2)
+					elseif kind == "Rod" then
+						active = (id == rodName)
+					elseif kind == "Tool" then
+						active = (id == tool1 or id == tool2)
+					end
+				end
+				self:SetCardHotbarHighlight(card, active)
+			end
+		end
+	end
+
+	refreshContent(self.Inventory.FishContent)
+	refreshContent(self.Inventory.RodContent)
+	refreshContent(self.Inventory.ToolContent)
+	refreshContent(self.Inventory.AdminContent)
 end
 
 function Controller:GetRarityColor(rarity)
@@ -183,11 +259,14 @@ function Controller:CheckVIPStatus()
 	end
 
 	if self.RoleConfig.IsOwner(self.player) or self.RoleConfig.IsAdmin(self.player) then
+		self.isAdmin = true
 		self.isVIP = true
+	else
+		self.isAdmin = false
 	end
 
-	if self.Inventory.VIPTabButton then
-		self.Inventory.VIPTabButton.Visible = self.isVIP
+	if self.Inventory.AdminTabButton then
+		self.Inventory.AdminTabButton.Visible = self.isAdmin
 	end
 
 	return self.isVIP
@@ -206,8 +285,8 @@ end
 function Controller:UpdateSellButtonVisual()
 	if not self.Inventory.SellAllButton then return end
 	if self:HasRemoteSellPermission() then
-		self.Inventory.SellAllButton.Text = "Sell All Fish"
-		self.Inventory.SellAllButton.BackgroundColor3 = Color3.fromRGB(255, 183, 0)
+		self.Inventory.SellAllButton.Text = "Sell All"
+		self.Inventory.SellAllButton.BackgroundColor3 = Color3.fromRGB(76, 175, 80)
 	else
 		self.Inventory.SellAllButton.Text = "🔒 Sell (Perk)"
 		self.Inventory.SellAllButton.BackgroundColor3 = Color3.fromRGB(80, 80, 85)

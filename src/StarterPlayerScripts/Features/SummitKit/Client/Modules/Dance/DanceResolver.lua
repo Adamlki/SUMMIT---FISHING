@@ -49,13 +49,11 @@ local menus = findWithWait(gameUI, "Menus", 60)
 		return false, "Pose ScrollingFrame not found"
 	end
 
-	local buttons = findFirst(gameUI, "Buttons")
-	if not buttons then
-		local component = findFirst(gameUI, "Component")
-		buttons = component and findFirst(component, "Buttons")
-	end
-	local topMid = buttons and findFirst(buttons, "TopMid")
-	local toggleBtn = topMid and findFirst(topMid, "Dance")
+	local component = findFirst(gameUI, "Component")
+	local buttons = component and findFirst(component, "ButtonsNew")
+	local menuKiri = buttons and findFirst(buttons, "MenuKiri")
+	local frameBtn = menuKiri and findFirst(menuKiri, "FrameBtn")
+	local toggleBtn = frameBtn and findFirst(frameBtn, "EmoteButton")
 
 	return true, {
 		GameUI = gameUI,

@@ -23,9 +23,10 @@ function Resolver.resolve()
 		return false, "Component atau Menus tidak ditemukan"
 	end
 
-	local buttons = find(component, "Buttons")
-	local leftHolder = buttons and find(buttons, "LeftHolder")
-	local toggleBtn = leftHolder and find(leftHolder, "Spectate")
+	local buttons = find(component, "ButtonsNew")
+	local menuKiri = buttons and find(buttons, "MenuKiri")
+	local frameBtn = menuKiri and find(menuKiri, "FrameBtn")
+	local toggleBtn = frameBtn and find(frameBtn, "SpectateButton")
 
 	local menu = find(menus, "Spectate")
 	if not menu then

@@ -108,14 +108,14 @@ function Controller:HandleKeyPress(input, gameProcessed)
 	elseif keyCode == Enum.KeyCode.Two then
 		if self.lastEquippedToolName1 and self.lastEquippedToolName1 ~= "" then
 			self:PlayClickSound()
-			self:ToggleEquipToolByName(self.lastEquippedToolName1, self.isVIP and "VIP" or "Tools")
+			self:ToggleEquipToolByName(self.lastEquippedToolName1, self.isAdmin and "Admin" or "Tools")
 		end
 
 	-- Shortcut 3: Tool 2 (biasa / admin)
 	elseif keyCode == Enum.KeyCode.Three then
 		if self.lastEquippedToolName2 and self.lastEquippedToolName2 ~= "" then
 			self:PlayClickSound()
-			self:ToggleEquipToolByName(self.lastEquippedToolName2, self.isVIP and "VIP" or "Tools")
+			self:ToggleEquipToolByName(self.lastEquippedToolName2, self.isAdmin and "Admin" or "Tools")
 		end
 
 	-- Shortcut 4: Fish 1 (Slot 4)
@@ -214,7 +214,7 @@ function Controller:SetupButtonEvents()
 	if self.Hotbar.ToolSlot1 then
 		table.insert(self.buttonConnections, self.Hotbar.ToolSlot1.MouseButton1Click:Connect(function()
 			self:PlayClickSound()
-			self:ToggleEquipToolByName(self.lastEquippedToolName1, self.isVIP and "VIP" or "Tools")
+			self:ToggleEquipToolByName(self.lastEquippedToolName1, self.isAdmin and "Admin" or "Tools")
 		end))
 	end
 
@@ -222,7 +222,7 @@ function Controller:SetupButtonEvents()
 	if self.Hotbar.ToolSlot2 then
 		table.insert(self.buttonConnections, self.Hotbar.ToolSlot2.MouseButton1Click:Connect(function()
 			self:PlayClickSound()
-			self:ToggleEquipToolByName(self.lastEquippedToolName2, self.isVIP and "VIP" or "Tools")
+			self:ToggleEquipToolByName(self.lastEquippedToolName2, self.isAdmin and "Admin" or "Tools")
 		end))
 	end
 
@@ -316,15 +316,15 @@ function Controller:SetupButtonEvents()
 		end))
 	end
 
-	if self.Inventory.VIPTabButton then
-		local lastVipClick = 0
-		local function onVipClick()
-			if os.clock() - lastVipClick < 0.2 then return end
-			lastVipClick = os.clock()
+	if self.Inventory.AdminTabButton then
+		local lastAdminClick = 0
+		local function onAdminClick()
+			if os.clock() - lastAdminClick < 0.2 then return end
+			lastAdminClick = os.clock()
 			self:PlayClickSound()
-			self:SwitchTab("VIP")
+			self:SwitchTab("Admin")
 		end
-		table.insert(self.buttonConnections, self.Inventory.VIPTabButton.MouseButton1Click:Connect(onVipClick))
+		table.insert(self.buttonConnections, self.Inventory.AdminTabButton.MouseButton1Click:Connect(onAdminClick))
 	end
 
 	if self.Inventory.SellAllButton then

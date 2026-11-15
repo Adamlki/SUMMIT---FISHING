@@ -20,9 +20,10 @@ function ResetUIResolver.resolve()
         return false, "Component atau Menus tidak ditemukan"
     end
 
-    local buttons = component:FindFirstChild("Buttons")
-    local topRight = buttons and buttons:FindFirstChild("TopRight")
-    local toggleBtn = topRight and topRight:FindFirstChild("Reset")
+    local buttons = component:FindFirstChild("ButtonsNew")
+    local menuKiri = buttons and buttons:FindFirstChild("MenuKiri")
+    local frameBtn = menuKiri and menuKiri:FindFirstChild("FrameBtn")
+    local toggleBtn = frameBtn and frameBtn:FindFirstChild("ResetButton")
 
     local menuFrame = menus:FindFirstChild("Reset")
     if not menuFrame then

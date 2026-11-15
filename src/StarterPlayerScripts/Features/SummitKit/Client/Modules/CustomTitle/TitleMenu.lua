@@ -23,6 +23,7 @@ local Data = require(Modules:WaitForChild("Data"))
 local TitlePreview = require(Modules:WaitForChild("TitlePreview"))
 local SlotBindings = require(Modules:WaitForChild("SlotBindings"))
 local SlotActions = require(Modules:WaitForChild("SlotActions"))
+local Panel = require(script.Parent.Parent.UI.Panel)
 
 local FeatureFlags = require(ReplicatedStorage:WaitForChild("Configs"):WaitForChild("FeatureFlags"))
 local TitleMenu = {}
@@ -49,9 +50,9 @@ function TitleMenu.init()
 	if not titleMenuFrame then return false end
 
 	local component = gameUI:WaitForChild("Component", 15)
-	local buttonsFrame = component and component:WaitForChild("Buttons", 15)
-	local adminRight = buttonsFrame and buttonsFrame:WaitForChild("AdminRight", 15)
-	local toggleBtn = adminRight and adminRight:WaitForChild("Title", 15)
+	local buttonsFrame = component and component:WaitForChild("ButtonsNew", 15)
+	local menuKanan = buttonsFrame and buttonsFrame:WaitForChild("MenuKanan", 15)
+	local toggleBtn = menuKanan and menuKanan:WaitForChild("TitleButton", 15)
 
 	if toggleBtn and toggleBtn:IsA("GuiButton") then
 		toggleBtn.Visible = true
@@ -65,7 +66,7 @@ function TitleMenu.init()
 			local now = os.clock()
 			if now - lastToggle < 0.25 then return end
 			lastToggle = now
-			titleMenuFrame.Visible = not titleMenuFrame.Visible
+			Panel.toggle(titleMenuFrame)
 		end
 		toggleBtn.Activated:Connect(doToggle)
 	end
@@ -135,7 +136,7 @@ function TitleMenu.init()
 	SlotActions.bind(ctx, data)
 
 	closeBtn.MouseButton1Click:Connect(function()
-		titleMenuFrame.Visible = false
+		Panel.close(titleMenuFrame)
 	end)
 
 	titleMenuFrame:GetPropertyChangedSignal("Visible"):Connect(function()

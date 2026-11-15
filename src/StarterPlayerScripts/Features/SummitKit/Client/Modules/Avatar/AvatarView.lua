@@ -31,7 +31,7 @@ function AvatarView.new(refs)
     self.selected = nil
 
     self.janitor:Add(self.ui.OnToggle:Connect(function()
-        if self.ui.menuFrame and self.ui.menuFrame.Visible then
+        if self.ui:isOpen() then
             self.ui:hide()
         else
             self.ui:show()

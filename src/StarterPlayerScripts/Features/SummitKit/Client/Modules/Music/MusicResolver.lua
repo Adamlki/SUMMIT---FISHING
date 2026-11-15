@@ -64,9 +64,10 @@ function MusicResolver.Resolve(playerGui)
 	local template = musicListFrame and findFirst(musicListFrame, "MusicFrame")
 
 	local component = findFirst(gameUI, "Component") or findWithWait(gameUI, "Component", 5)
-	local buttons = findFirst(gameUI, "Buttons") or (component and (findFirst(component, "Buttons") or findWithWait(component, "Buttons", 5)))
-	local topMid = buttons and (findFirst(buttons, "TopMid") or findWithWait(buttons, "TopMid", 5))
-	local toggleBtn = topMid and (findFirst(topMid, "Music") or findWithWait(topMid, "Music", 5))
+	local buttons = component and (findFirst(component, "ButtonsNew") or findWithWait(component, "ButtonsNew", 5))
+	local menuKiri = buttons and (findFirst(buttons, "MenuKiri") or findWithWait(buttons, "MenuKiri", 5))
+	local frameBtn = menuKiri and (findFirst(menuKiri, "FrameBtn") or findWithWait(menuKiri, "FrameBtn", 5))
+	local toggleBtn = frameBtn and (findFirst(frameBtn, "MusicButton") or findWithWait(frameBtn, "MusicButton", 5))
 
 	return true, {
 		GameUI = gameUI,

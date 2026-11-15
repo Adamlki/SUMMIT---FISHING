@@ -8,6 +8,7 @@ local Knit = require(Packages.Knit)
 local Janitor = require(Packages.Janitor)
 
 local SettingMenu = require(script.Parent.Parent.Modules.Settings.SettingMenu)
+local TopbarIcon = require(script.Parent.Parent.Modules.TopbarIcon)
 
 local Controller = Knit.CreateController({ Name = "SettingController" })
 local janitor = Janitor.new()
@@ -32,6 +33,11 @@ end
 function Controller:KnitStart()
     local lp = Players.LocalPlayer
     setup(lp)
+
+    local settingsIcon = TopbarIcon.create(TopbarIcon.Images.Settings, SettingMenu.toggle)
+    if settingsIcon then
+        janitor:Add(settingsIcon, "Destroy")
+    end
 
     janitor:Add(Players.PlayerAdded:Connect(function(player)
         if player == lp then

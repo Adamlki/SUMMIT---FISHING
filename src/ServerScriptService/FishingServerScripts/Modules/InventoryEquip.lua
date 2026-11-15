@@ -242,6 +242,11 @@ function Equip.onEquipFish(player, fishUniqueId)
 		rarityValue.Value = fishData.rarity
 		rarityValue.Parent = toolToEquip
 
+		local mutationValue = Instance.new("StringValue")
+		mutationValue.Name = "Mutation"
+		mutationValue.Value = fishData.mutation or ""
+		mutationValue.Parent = toolToEquip
+
 		local favoritedValue = Instance.new("BoolValue")
 		favoritedValue.Name = "isFavorited"
 		favoritedValue.Value = fishData.isFavorited or false

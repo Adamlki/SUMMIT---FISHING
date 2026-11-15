@@ -26,9 +26,10 @@ function DonationsResolver.resolve(customGui)
         return false, "Component atau Menus tidak ditemukan"
     end
 
-    local buttons = find(component, "Buttons")
-    local topRight = buttons and find(buttons, "TopRight")
-    local toggleBtn = topRight and find(topRight, "Donate")
+    local buttons = find(component, "ButtonsNew")
+    local menuKiri = buttons and find(buttons, "MenuKiri")
+    local frameBtn = menuKiri and find(menuKiri, "FrameBtn")
+    local toggleBtn = frameBtn and find(frameBtn, "DonationButton")
 
     local menuFrame = find(menus, "Donate")
     local header = menuFrame and find(menuFrame, "Header")

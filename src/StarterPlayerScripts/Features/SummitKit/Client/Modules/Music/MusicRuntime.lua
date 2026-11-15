@@ -6,7 +6,7 @@ local Packages = Shared.Packages
 local Janitor = require(Packages.Janitor)
 local Logger = require(script.Parent.Parent.Logger)
 local MusicInput = require(script.Parent.MusicInput)
-local MusicAnimator = require(script.Parent.MusicAnimator)
+local Panel = require(script.Parent.Parent.UI.Panel)
 local MusicListRenderer = require(script.Parent.MusicListRenderer)
 local MusicPlayback = require(script.Parent.MusicPlayback)
 local RuntimeHelpers = script.Parent:WaitForChild("RuntimeHelpers")
@@ -32,7 +32,6 @@ function MusicRuntime.new(refs, musicData)
 
 	self._isDragging = false
 	self._volume = 100
-	self._animator = MusicAnimator.new(refs.Menu)
 	self._playback = MusicPlayback.new()
 
 	self:_bindUI()
@@ -138,17 +137,15 @@ function MusicRuntime:_bindUI()
 end
 
 function MusicRuntime:_openMenu()
-	local conn = self._animator:Open()
-	if conn then
-		self._janitor:Add(conn, "Disconnect")
-	end
+	Panel.open(self._refs.Menu)
 end
 
 function MusicRuntime:_closeMenu()
-	local conn = self._animator:Close()
-	if conn then
-		self._janitor:Add(conn, "Disconnect")
-	end
+	Panel.close(self._refs.Menu)
+end
+
+function MusicRuntime:_toggleMenu()
+	Panel.toggle(self._refs.Menu)
 end
 
 function MusicRuntime:_onVolumeDrag()

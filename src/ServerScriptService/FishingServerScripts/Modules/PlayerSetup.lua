@@ -98,6 +98,7 @@ local function restoreSavedFish(player)
 				local idValue = Instance.new("StringValue", toolClone); idValue.Name = "FishId"; idValue.Value = fishData.uniqueId
 				local weightValue = Instance.new("NumberValue", toolClone); weightValue.Name = "Weight"; weightValue.Value = fishData.weight
 				local rarityValue = Instance.new("StringValue", toolClone); rarityValue.Name = "Rarity"; rarityValue.Value = fishData.rarity
+				local mutationValue = Instance.new("StringValue", toolClone); mutationValue.Name = "Mutation"; mutationValue.Value = fishData.mutation or ""
 				local favValue = Instance.new("BoolValue", toolClone); favValue.Name = "isFavorited"; favValue.Value = fishData.isFavorited or false
 				toolClone.Parent = backpack
 			end

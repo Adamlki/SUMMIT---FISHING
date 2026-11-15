@@ -168,6 +168,20 @@ FishingConfig.RarityColors = {
 
 FishingConfig.rarityOrder = {Common = 1, Uncommon = 2, Rare = 3, Epic = 4, Legendary = 5, Mitos = 6, Secret = 7}
 
+-- Mutations: varian langka per tangkapan yang menaikkan harga jual (bukan rarity).
+-- Chance = BaseChance * GlobalMutationMultiplier (event admin) * boost pass MoreMutations.
+FishingConfig.MutationSettings = {
+	Enabled = true,
+	BaseChance = 0.05, -- 5% per ikan (sebelum event/pass)
+	MaxChance = 0.75,  -- batas aman supaya tidak pernah 100%
+	Types = {
+		{ Name = "Golden", Weight = 50, ValueMultiplier = 1.5, Color = Color3.fromRGB(255, 205, 50) },
+		{ Name = "Crystal", Weight = 30, ValueMultiplier = 2.0, Color = Color3.fromRGB(130, 220, 255) },
+		{ Name = "Rainbow", Weight = 15, ValueMultiplier = 3.0, Color = Color3.fromRGB(255, 120, 220) },
+		{ Name = "Void", Weight = 5, ValueMultiplier = 5.0, Color = Color3.fromRGB(170, 100, 255) },
+	}
+}
+
 FishingConfig.RoleSettings = {
 	Enabled = true, GroupID = 410265215, --> Your Community ID
 	RoleRodMapping = {
@@ -302,6 +316,76 @@ function FishingConfig.GetRarityColor(rarity)
 end
 
 -- ⚠️ THIS IS THE CRITICAL FUNCTION - LUCK CALCULATION
+-- Boost luck pass dibaca dari config toko supaya angka di kartu = angka gameplay.
+local LuckPasses = require(script.Parent:WaitForChild("ShopMasterConfig")).Exclusive.LuckPasses
+
+local function luckPassMultiplier(key, fallbackPercent)
+	local info = LuckPasses and LuckPasses[key]
+	local percent = info and info.BoostPercent
+	if type(percent) ~= "number" then
+		percent = fallbackPercent
+	end
+	return 1 + percent / 100
+end
+
+-- ===== MUTATION =====
+function FishingConfig.GetMutationType(name)
+	if type(name) ~= "string" then return nil end
+	for _, mutation in ipairs(FishingConfig.MutationSettings.Types) do
+		if mutation.Name == name then return mutation end
+	end
+	return nil
+end
+
+function FishingConfig.GetMutationMultiplier(name)
+	local mutation = FishingConfig.GetMutationType(name)
+	return mutation and mutation.ValueMultiplier or 1
+end
+
+function FishingConfig.GetMutationColor(name)
+	local mutation = FishingConfig.GetMutationType(name)
+	return mutation and mutation.Color or Color3.fromRGB(255, 255, 255)
+end
+
+function FishingConfig.GetMutationChanceMultiplier(player)
+	local repStorage = game:GetService("ReplicatedStorage")
+	local fishingSystem = repStorage:FindFirstChild("FishingSystem")
+	local valueObj = fishingSystem and fishingSystem:FindFirstChild("GlobalMutationMultiplier")
+	local eventMultiplier = valueObj and valueObj.Value or 1
+
+	local passMultiplier = 1
+	if player and typeof(player) == "Instance" then
+		if player:GetAttribute("MoreMutations") == true or player:GetAttribute("HasMutationsPass") == true then
+			passMultiplier = luckPassMultiplier("MoreMutations", 60)
+		end
+	end
+
+	return eventMultiplier * passMultiplier
+end
+
+function FishingConfig.RollMutation(player)
+	local settings = FishingConfig.MutationSettings
+	if not settings or not settings.Enabled then return nil end
+	if not settings.Types or #settings.Types == 0 then return nil end
+
+	local chance = settings.BaseChance * FishingConfig.GetMutationChanceMultiplier(player)
+	chance = math.clamp(chance, 0, settings.MaxChance or 0.75)
+	if math.random() >= chance then return nil end
+
+	local totalWeight = 0
+	for _, mutation in ipairs(settings.Types) do
+		totalWeight = totalWeight + (mutation.Weight or 0)
+	end
+	if totalWeight <= 0 then return nil end
+
+	local roll = math.random() * totalWeight
+	for _, mutation in ipairs(settings.Types) do
+		roll = roll - (mutation.Weight or 0)
+		if roll < 0 then return mutation end
+	end
+	return settings.Types[#settings.Types]
+end
+
 function FishingConfig.CalculateTotalLuck(baseLuck, powerPercent, player)
 	-- 1. Ambil nilai Boost dari ReplicatedStorage
 	local repStorage = game:GetService("ReplicatedStorage")
@@ -319,13 +403,13 @@ function FishingConfig.CalculateTotalLuck(baseLuck, powerPercent, player)
 			gamepassMultiplier = gamepassMultiplier * 1.5 -- +50% VIP Luck
 		end
 		if player:GetAttribute("SmallLuck") == true then
-			gamepassMultiplier = gamepassMultiplier * 1.25 -- +25% Small Luck
+			gamepassMultiplier = gamepassMultiplier * luckPassMultiplier("SmallLuck", 30)
 		end
 		if player:GetAttribute("ExtraLuck") == true then
-			gamepassMultiplier = gamepassMultiplier * 1.5 -- +50% Extra Luck
+			gamepassMultiplier = gamepassMultiplier * luckPassMultiplier("ExtraLuck", 50)
 		end
 		if player:GetAttribute("EdvancedLuck") == true then
-			gamepassMultiplier = gamepassMultiplier * 2.0 -- +100% Advanced Luck
+			gamepassMultiplier = gamepassMultiplier * luckPassMultiplier("EdvancedLuck", 150)
 		end
 	end
 
@@ -359,7 +443,7 @@ function FishingConfig.GenerateFishWeight(fish, totalLuck, maxRodWeight)
 	return math.floor(fishWeight * 10 + 0.5) / 10
 end
 
-function FishingConfig.CalculateFishPrice(weight, rarity)
+function FishingConfig.CalculateFishPrice(weight, rarity, mutationMultiplier)
 	local basePricePerKg = FishingConfig.SellingSettings.basePricePerKg
 	local rarityMult = FishingConfig.SellingSettings.rarityMultiplier[rarity] or 1.0
 	local basePrice = weight * basePricePerKg * rarityMult
@@ -373,7 +457,7 @@ function FishingConfig.CalculateFishPrice(weight, rarity)
 			end
 		end
 	end
-	return math.floor(finalPrice + 0.5)
+	return math.floor(finalPrice * (mutationMultiplier or 1) + 0.5)
 end
 
 function FishingConfig.HasGamepassEffects(rodName)

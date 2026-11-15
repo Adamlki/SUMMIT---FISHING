@@ -212,7 +212,7 @@ function Data.onSellAll(player)
 	-- Hitung hanya ikan yang benar-benar terhapus.
 	local totalCoins = 0
 	for _, fish in ipairs(removedFish) do
-		totalCoins = totalCoins + FishingConfig.CalculateFishPrice(fish.weight, fish.rarity)
+		totalCoins = totalCoins + FishingConfig.CalculateFishPrice(fish.weight, fish.rarity, FishingConfig.GetMutationMultiplier(fish.mutation))
 	end
 
 	-- Tambahkan koin dulu; kalau gagal, kembalikan ikan dan jangan hancurkan tool.

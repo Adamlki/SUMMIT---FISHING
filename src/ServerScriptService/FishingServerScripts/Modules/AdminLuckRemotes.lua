@@ -48,8 +48,7 @@ local function onTriggerAdminEvent(player, data)
 		admin = player.DisplayName,
 		durationMinutes = durationMin,
 		luck = luck,
-		mutation = mutation,
-		bonusLuck = string.format("+%d%%", luck * 666)
+		mutation = mutation
 	})
 
 	-- 2. Jika Global, publish via MessagingService
@@ -81,8 +80,7 @@ local function onGlobalMessage(msg)
 			admin = d.a or "Admin",
 			durationMinutes = math.floor((d.d or 1800) / 60),
 			luck = d.m or 30,
-			mutation = d.mut or 7,
-			bonusLuck = string.format("+%d%%", (d.m or 30) * 666)
+			mutation = d.mut or 7
 		})
 
 		Boost.execute(d.m, d.d, true, d.a, d.s)

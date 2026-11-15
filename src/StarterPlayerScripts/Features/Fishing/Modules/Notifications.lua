@@ -42,7 +42,11 @@ function Module.Install(Controller)
 		end
 
 		gameState.lastRollId = serverResult.RollId
-		return { name = serverResult.Name, rarity = serverResult.Rarity }, serverResult.Weight
+		return {
+			name = serverResult.Name,
+			rarity = serverResult.Rarity,
+			mutation = serverResult.Mutation
+		}, serverResult.Weight
 	end
 
 	function Controller:GetFishModelTemplate(fishName)
@@ -226,11 +230,18 @@ function Module.Install(Controller)
 		local FishingConfig = self.FishingConfig
 		local GUIManager = self.GUIManager
 		local rarityColor = FishingConfig and FishingConfig.GetRarityColor(selectedFish.rarity) or Color3.fromRGB(255, 255, 255)
-		local message = string.format("Mendapatkan %s %.1fkg", selectedFish.name, fishWeight or 1)
+		local mutation = selectedFish.mutation
+		local textColor = rarityColor
+		local displayName = selectedFish.name
+		if mutation and mutation ~= "" and FishingConfig then
+			textColor = FishingConfig.GetMutationColor(mutation)
+			displayName = string.format("%s %s", mutation, selectedFish.name)
+		end
+		local message = string.format("Mendapatkan %s %.1fkg", displayName, fishWeight or 1)
 		if GUIManager and GUIManager.ShowFishNotification then
-			GUIManager:ShowFishNotification(message, selectedFish.name, 4, rarityColor)
+			GUIManager:ShowFishNotification(message, selectedFish.name, 4, textColor)
 		elseif GUIManager then
-			GUIManager:ShowNotification(message, 4, rarityColor)
+			GUIManager:ShowNotification(message, 4, textColor)
 		end
 	end
 end

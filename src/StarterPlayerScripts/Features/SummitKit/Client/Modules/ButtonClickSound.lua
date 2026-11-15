@@ -11,6 +11,7 @@ function ButtonClickSound.init()
 		return runtime
 	end
 
+	ButtonClickSoundPlayer.preload()
 	runtime = ButtonClickSoundBinder.start(ButtonClickSoundPlayer.play)
 	return runtime
 end

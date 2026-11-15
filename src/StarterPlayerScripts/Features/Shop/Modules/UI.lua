@@ -1,5 +1,6 @@
 local TweenService = game:GetService("TweenService")
 local SoundService = game:GetService("SoundService")
+local Panel = require(script.Parent.Parent.Parent.SummitKit.Client.Modules.UI.Panel)
 
 local TWEEN_HOVER = TweenInfo.new(0.16, Enum.EasingStyle.Quad, Enum.EasingDirection.Out)
 local TWEEN_SQUASH = TweenInfo.new(0.08, Enum.EasingStyle.Quart, Enum.EasingDirection.Out)
@@ -12,15 +13,30 @@ function Module.Install(Controller)
 -- ===================================================================
 -- SOUND ENGINE
 -- ===================================================================
+local soundCache = {}
+
+local function getCachedSound(soundId: string): Sound
+	local cached = soundCache[soundId]
+	if cached and cached.Parent then
+		return cached
+	end
+	local sound = Instance.new("Sound")
+	sound.Name = "ShopSound"
+	sound.SoundId = soundId
+	sound.Parent = SoundService
+	soundCache[soundId] = sound
+	return sound
+end
+
 function Controller:PlaySound(soundId: string, volume: number?)
-	task.spawn(function()
-		local sound = Instance.new("Sound")
-		sound.SoundId = soundId
-		sound.Volume = volume or 0.35
-		sound.Parent = SoundService
-		sound:Play()
-		sound.Ended:Connect(function() sound:Destroy() end)
-	end)
+	if not soundId or soundId == "" then
+		return
+	end
+	-- Pakai sound yang sudah di-cache supaya tidak menunggu asset load.
+	local sound = getCachedSound(soundId)
+	sound.Volume = volume or 0.35
+	sound.TimePosition = 0
+	sound:Play()
 end
 
 -- ===================================================================
@@ -61,13 +77,30 @@ function Controller:ResolveUI(): boolean
 	self.modalTemplate = self.modalContainer:WaitForChild("Template") :: Frame
 	self.modalTemplate.Visible = false
 
-	local buttonsFolder = gameUI:WaitForChild("Component"):WaitForChild("Buttons")
-	local leftHolder = buttonsFolder:WaitForChild("LeftHolder")
-	self.shopToolbarBtn = leftHolder:FindFirstChild("Shop") :: GuiButton?
+	local buttonsFolder = gameUI:WaitForChild("Component"):WaitForChild("ButtonsNew")
+	local menuAtas = buttonsFolder:WaitForChild("MenuAtas")
+	local topFrame = menuAtas:WaitForChild("Frame")
+	self.shopToolbarBtn = topFrame:FindFirstChild("ShopButton") :: GuiButton?
 
 	self:ApplyTactileEffectsToContainer(shopFeature)
 	self:ApplyTactileEffectsToContainer(self.modal)
+	self:PreloadSounds()
 	return true
+end
+
+-- Preload semua sound shop sekali supaya tidak delay saat klik.
+function Controller:PreloadSounds()
+	local list = {}
+	for _, id in pairs(self.SOUNDS or {}) do
+		if type(id) == "string" and id ~= "" then
+			table.insert(list, getCachedSound(id))
+		end
+	end
+	task.spawn(function()
+		pcall(function()
+			game:GetService("ContentProvider"):PreloadAsync(list)
+		end)
+	end)
 end
 
 -- ===================================================================
@@ -139,6 +172,17 @@ end
 -- ===================================================================
 -- TAB NAVIGATION ENGINE
 -- ===================================================================
+local function popTab(tab: GuiObject)
+	local scale = tab:FindFirstChild("TabScale") :: UIScale?
+	if not scale then
+		scale = Instance.new("UIScale")
+		scale.Name = "TabScale"
+		scale.Parent = tab
+	end
+	scale.Scale = 0.97
+	TweenService:Create(scale, TWEEN_HEADER_TRANS, { Scale = 1 }):Play()
+end
+
 function Controller:SwitchTab(tabName: string)
 	self.currentTab = tabName
 	self:UpdateHeaderButtonVisuals(tabName)
@@ -149,68 +193,29 @@ function Controller:SwitchTab(tabName: string)
 
 	if tabName == "Exclusive" then
 		self:ApplyExclusiveMasterConfig()
+		popTab(self.exclusiveTab)
 	elseif tabName == "Rods" then
 		self:RenderRodsCatalogImmediate()
+		popTab(self.rodsTab)
 	elseif tabName == "Trails" then
 		self:RenderTrailsCatalog()
+		popTab(self.trailsTab)
 	end
 end
 
 -- ===================================================================
--- WINDOW VISIBILITY & ANIMATION CONTROLS (Top-to-Bottom Smooth Easing)
+-- WINDOW VISIBILITY (shared Panel motion: slide + pop, exclusive)
 -- ===================================================================
 function Controller:OpenShop(initialTab: string?)
-	self.shopTweenId += 1
-	local curId = self.shopTweenId
-	if self.shopTween then
-		self.shopTween:Cancel()
-		self.shopTween = nil
-	end
-
-	self.shopFeature.AnchorPoint = Vector2.new(0.5, 0.5)
-	self.shopFeature.Position = self.SHOP_HIDDEN_POS
-	self.shopFeature.Visible = true
-	self.shopFeature:SetAttribute("IsOpen", true)
 	self.modal.Visible = false
 	self:SwitchTab(initialTab or self.currentTab or "Exclusive")
 	self:RefreshData()
-
-	self.shopTween = TweenService:Create(
-		self.shopFeature,
-		TweenInfo.new(0.28, Enum.EasingStyle.Quad, Enum.EasingDirection.Out),
-		{ Position = self.SHOP_SHOWN_POS }
-	)
-	self.shopTween.Completed:Connect(function()
-		if curId == self.shopTweenId then
-			self.shopTween = nil
-		end
-	end)
-	self.shopTween:Play()
+	Panel.open(self.shopFeature)
 end
 
 function Controller:CloseShop()
-	self.shopTweenId += 1
-	local curId = self.shopTweenId
-	if self.shopTween then
-		self.shopTween:Cancel()
-		self.shopTween = nil
-	end
-
-	self.shopFeature:SetAttribute("IsOpen", false)
 	self.modal.Visible = false
-
-	self.shopTween = TweenService:Create(
-		self.shopFeature,
-		TweenInfo.new(0.25, Enum.EasingStyle.Quad, Enum.EasingDirection.In),
-		{ Position = self.SHOP_HIDDEN_POS }
-	)
-	self.shopTween.Completed:Connect(function()
-		if curId == self.shopTweenId then
-			self.shopFeature.Visible = false
-			self.shopTween = nil
-		end
-	end)
-	self.shopTween:Play()
+	Panel.close(self.shopFeature)
 end
 
 function Controller:WireWindowControls()
@@ -227,15 +232,14 @@ function Controller:WireWindowControls()
 	self.closeBtn.MouseButton1Click:Connect(function() self:CloseShop() end)
 
 	self.shopFeature:GetAttributeChangedSignal("IsOpen"):Connect(function()
-		local isOpen = self.shopFeature:GetAttribute("IsOpen") == true
-		if not isOpen and self.shopFeature.Visible and (not self.shopTween or self.shopFeature.Position == self.SHOP_SHOWN_POS) then
+		if self.shopFeature:GetAttribute("IsOpen") ~= true and Panel.isOpen(self.shopFeature) then
 			self:CloseShop()
 		end
 	end)
 
 	if self.shopToolbarBtn then
 		self.shopToolbarBtn.MouseButton1Click:Connect(function()
-			if self.shopFeature:GetAttribute("IsOpen") == true then
+			if Panel.isOpen(self.shopFeature) then
 				self:CloseShop()
 			else
 				self:OpenShop("Exclusive")

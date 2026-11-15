@@ -10,6 +10,7 @@ local Janitor = require(Packages.Janitor)
 local SpectateInput = require(script.Parent.SpectateInput)
 local SpectateFreeze = require(script.Parent.SpectateFreeze)
 local SpectateList = require(script.Parent.SpectateList)
+local Panel = require(script.Parent.Parent.UI.Panel)
 local RuntimeHelpers = script.Parent:WaitForChild("RuntimeHelpers")
 local SpectateTarget = require(RuntimeHelpers:WaitForChild("SpectateTarget"))
 
@@ -31,6 +32,7 @@ function SpectateRuntime.new(refs)
 	self._list = {}
 	self._index = 1
 	self._freeze = SpectateFreeze.new()
+	Panel.mount(refs.Root, { noDim = true })
 	return self
 end
 
@@ -60,7 +62,7 @@ function SpectateRuntime:_start()
 	end
 	self:_rebuildList()
 	self._spectating = true
-	self._refs.Root.Visible = true
+	Panel.open(self._refs.Root)
 	self._index = SpectateList.findIndex(self._list, Players.LocalPlayer)
 	self:_setTarget(self._list[self._index])
 
@@ -83,7 +85,7 @@ function SpectateRuntime:_stop()
 		return
 	end
 	self._spectating = false
-	self._refs.Root.Visible = false
+	Panel.close(self._refs.Root)
 
 	self._targetJanitor:Cleanup()
 	self._janitor:Remove("MyCharConn")
